@@ -15,6 +15,7 @@ from .services.audit import AuditWriter
 from .services.authorization_codes import AuthorizationCodeService
 from .services.device_binding import DeviceBindingService
 from .services.sessions import SessionService
+from .services.thresholds import ThresholdService
 
 
 def _core_database_url(database_url: str) -> str:
@@ -45,6 +46,8 @@ def configure_auth_services(
     )
     app.state.password_hasher = password_hasher
     app.state.secret_vault = vault
+    app.state.audit_writer = audit_writer
+    app.state.clock = resolved_clock
     app.state.task_signer = load_task_signer(
         settings.task_signing_key_path, settings.task_signing_key_version
     )
@@ -76,6 +79,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with open_pool(_core_database_url(resolved.database_url)) as core_pool:
             async with open_auth_engine(resolved.database_url) as auth:
                 configure_core_services(app, core_pool)
+                app.state.threshold_service = ThresholdService(
+                    app.state.threshold_previews,
+                    app.state.audit_writer,
+                    app.state.clock,
+                    preview_ttl_seconds=(
+                        resolved.threshold_preview_ttl_seconds
+                    ),
+                )
                 app.state.core_pool = core_pool
                 app.state.auth_sessions = auth.session_factory
                 yield
