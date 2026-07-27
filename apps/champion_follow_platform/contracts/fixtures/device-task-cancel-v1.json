@@ -1,0 +1,14 @@
+{
+  "task_id": "00000000-0000-0000-0000-000000000011",
+  "device_id": "00000000-0000-0000-0000-000000000001",
+  "period_id": "2607270001",
+  "revision": 2,
+  "action": "CANCEL",
+  "issued_at": "2026-07-27T04:00:00.000000Z",
+  "expires_at": "2026-07-27T04:10:00.000000Z",
+  "signing_key_version": "test-v1",
+  "payload": {
+    "reason": "global_stop"
+  },
+  "signature": "sTwIixf3v46A4ZBTWhD8XoHWrXXH7LSGq4qllBRdaCnkwKQrmGVVKCAgTlyqrh9T2AT7JMrzosmRDDKkG6CeAQ=="
+}

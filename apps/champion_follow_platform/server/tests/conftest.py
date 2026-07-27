@@ -9,7 +9,7 @@ import pyotp
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -29,13 +29,23 @@ from champion_follow_server.models.auth import (
     DeviceStatus,
     SessionKind,
 )
+from champion_follow_server.models.admin import (
+    ThresholdConfig,
+    ThresholdPreview,
+    ThresholdScope,
+    UserLevel,
+)
 from champion_follow_server.security.passwords import PasswordHasher
 from champion_follow_server.security.secrets import SecretDigester, SecretVault
+from champion_follow_server.security.task_signing import TaskSigner
 from champion_follow_server.services.audit import AuditWriter
 from champion_follow_server.services.authorization_codes import (
     AuthorizationCodeService,
 )
 from champion_follow_server.services.device_binding import DeviceBindingService
+from champion_follow_server.services.device_task_revisions import (
+    DeviceTaskRevisionService,
+)
 
 from factories.auth import make_device_keypair
 
@@ -378,6 +388,96 @@ async def disabled_user_access_token(
         async with auth_session_factory() as cleanup:
             await cleanup.execute(
                 delete(AuthSession).where(AuthSession.account_id == account.id)
+            )
+            await cleanup.execute(delete(Device).where(Device.id == device.id))
+            await cleanup.execute(delete(Account).where(Account.id == account.id))
+            await cleanup.commit()
+
+
+@pytest.fixture
+def task_signer() -> TaskSigner:
+    return TaskSigner(
+        Ed25519PrivateKey.from_private_bytes(bytes(range(32))), "test-v1"
+    )
+
+
+@pytest.fixture
+def revision_service(task_signer, clock):
+    return DeviceTaskRevisionService(task_signer, clock)
+
+
+@pytest.fixture
+def revision_service_factory(task_signer, clock):
+    return lambda: DeviceTaskRevisionService(task_signer, clock)
+
+
+@pytest_asyncio.fixture
+async def revision_context(auth_session_factory, clock):
+    async with auth_session_factory() as session:
+        account = Account(
+            username_canonical=f"task-{os.urandom(8).hex()}",
+            password_hash="test-hash",
+            role=AccountRole.USER,
+            status=AccountStatus.ACTIVE,
+            admin_slot=None,
+        )
+        session.add(account)
+        await session.flush()
+        device = Device(
+            account_id=account.id,
+            public_key_spki_der=b"task-test-public-key",
+            public_key_fingerprint=os.urandom(32),
+            binding_epoch=1,
+            status=DeviceStatus.ACTIVE,
+        )
+        session.add(device)
+        await session.flush()
+        preview = ThresholdPreview(
+            created_by_account_id=account.id,
+            device_id=device.id,
+            proposal_digest=b"p" * 32,
+            watermark_snapshot_id=UUID(
+                "00000000-0000-0000-0000-000000000301"
+            ),
+            windows=[],
+            viewed_at=clock.now(),
+            expires_at=clock.now() + timedelta(minutes=30),
+        )
+        session.add(preview)
+        await session.flush()
+        version = await session.scalar(
+            text("SELECT nextval('threshold_config_version_seq')")
+        )
+        threshold = ThresholdConfig(
+            config_version=version,
+            scope=ThresholdScope.DEVICE,
+            scope_key=str(device.id),
+            device_id=device.id,
+            minimum_level=UserLevel.CORE,
+            minimum_conservative_win_rate="0.5200000000",
+            minimum_conservative_roi="0.0192000000",
+            minimum_followable_rate="0.8000000000",
+            effective_minimum_win_rate="0.5200000000",
+            preview_id=preview.id,
+            is_removal=False,
+            is_active=True,
+            reason="task test threshold",
+            created_by_account_id=account.id,
+            activated_at=clock.now(),
+        )
+        session.add(threshold)
+        await session.commit()
+    try:
+        yield device, threshold
+    finally:
+        async with auth_session_factory() as cleanup:
+            await cleanup.execute(
+                delete(ThresholdConfig).where(
+                    ThresholdConfig.id == threshold.id
+                )
+            )
+            await cleanup.execute(
+                delete(ThresholdPreview).where(ThresholdPreview.id == preview.id)
             )
             await cleanup.execute(delete(Device).where(Device.id == device.id))
             await cleanup.execute(delete(Account).where(Account.id == account.id))

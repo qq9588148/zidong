@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://champion-follow.invalid/contracts/device-task-v1.schema.json",
+  "title": "Champion Follow Signed Device Task v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "device_id",
+    "period_id",
+    "revision",
+    "action",
+    "issued_at",
+    "expires_at",
+    "signing_key_version",
+    "payload",
+    "signature"
+  ],
+  "properties": {
+    "task_id": {"type": "string", "format": "uuid"},
+    "device_id": {"type": "string", "format": "uuid"},
+    "period_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "revision": {"type": "integer", "minimum": 1},
+    "action": {"enum": ["BET", "CANCEL"]},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "signing_key_version": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]{1,32}$"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}==$"
+    },
+    "payload": {
+      "oneOf": [
+        {"$ref": "#/$defs/bet"},
+        {"$ref": "#/$defs/cancel"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "BET"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/bet"}}}
+    },
+    {
+      "if": {"properties": {"action": {"const": "CANCEL"}}},
+      "then": {"properties": {"payload": {"$ref": "#/$defs/cancel"}}}
+    }
+  ],
+  "$defs": {
+    "bet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signal_id",
+        "signal_version",
+        "actor_ref",
+        "ball",
+        "direction",
+        "threshold_version",
+        "odds_micros",
+        "user_level",
+        "sample_count",
+        "conservative_win_rate",
+        "conservative_unit_return",
+        "followable_rate"
+      ],
+      "properties": {
+        "signal_id": {"type": "string", "format": "uuid"},
+        "signal_version": {"type": "integer", "minimum": 1},
+        "actor_ref": {"type": "string", "pattern": "^A[0-9]{6,12}$"},
+        "ball": {"type": "integer", "minimum": 1, "maximum": 5},
+        "direction": {
+          "enum": ["BIG", "SMALL", "ODD", "EVEN", "PRIME", "COMPOSITE"]
+        },
+        "threshold_version": {"type": "integer", "minimum": 1},
+        "odds_micros": {"const": 1960000},
+        "user_level": {"enum": ["CANDIDATE", "FORMAL", "CORE"]},
+        "sample_count": {"type": "integer", "minimum": 0},
+        "conservative_win_rate": {
+          "type": "string",
+          "pattern": "^(0|1)\\.[0-9]{10}$"
+        },
+        "conservative_unit_return": {
+          "type": "string",
+          "pattern": "^-?[0-9]+\\.[0-9]{10}$"
+        },
+        "followable_rate": {
+          "type": "string",
+          "pattern": "^(0|1)\\.[0-9]{10}$"
+        }
+      }
+    },
+    "cancel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "reason": {
+          "enum": [
+            "champion_withdrew",
+            "profile_downgraded",
+            "threshold_changed",
+            "collector_stale",
+            "data_gap",
+            "device_reassigned",
+            "account_disabled",
+            "device_unbound",
+            "global_stop"
+          ]
+        }
+      }
+    }
+  }
+}

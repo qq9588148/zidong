@@ -14,7 +14,9 @@ from .security.task_signing import load_task_signer
 from .services.audit import AuditWriter
 from .services.authorization_codes import AuthorizationCodeService
 from .services.device_binding import DeviceBindingService
+from .services.device_task_revisions import DeviceTaskRevisionService
 from .services.sessions import SessionService
+from .services.task_hub import TaskHub
 from .services.thresholds import ThresholdService
 
 
@@ -51,6 +53,10 @@ def configure_auth_services(
     app.state.task_signer = load_task_signer(
         settings.task_signing_key_path, settings.task_signing_key_version
     )
+    app.state.task_revision_service = DeviceTaskRevisionService(
+        app.state.task_signer, resolved_clock
+    )
+    app.state.task_hub = TaskHub()
     app.state.authorization_code_service = authorization_codes
     app.state.binding_service = DeviceBindingService(
         authorization_codes,

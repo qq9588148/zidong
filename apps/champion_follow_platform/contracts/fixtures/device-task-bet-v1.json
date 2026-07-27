@@ -1,0 +1,25 @@
+{
+  "task_id": "00000000-0000-0000-0000-000000000010",
+  "device_id": "00000000-0000-0000-0000-000000000001",
+  "period_id": "2607270001",
+  "revision": 1,
+  "action": "BET",
+  "issued_at": "2026-07-27T04:00:00.000000Z",
+  "expires_at": "2026-07-27T04:10:00.000000Z",
+  "signing_key_version": "test-v1",
+  "payload": {
+    "signal_id": "00000000-0000-0000-0000-000000000100",
+    "signal_version": 1,
+    "actor_ref": "A000007",
+    "ball": 2,
+    "direction": "ODD",
+    "threshold_version": 8,
+    "odds_micros": 1960000,
+    "user_level": "CORE",
+    "sample_count": 618,
+    "conservative_win_rate": "0.5431000000",
+    "conservative_unit_return": "0.0645000000",
+    "followable_rate": "0.8120000000"
+  },
+  "signature": "tJRMH2FzsU57X50cTTH4T7dxmU9VDu8Rp0QKCeJJuDK7J3VWCj0gB3vUfcEfqKmF_0UuJTB07yhWeJ8Yv6ebAw=="
+}
