@@ -67,7 +67,7 @@ export function probePlatformDocument(document: Document): PlatformPageProbe {
     (text) => /^(?:\d{1,2}:)?\d{1,2}:\d{2}$/.test(text),
   ).length;
   const odds196Count = texts.filter(
-    (text) => /^(?:1\.96|1\.960+)$/.test(text),
+    (text) => /^(?:1:)?1\.96(?:0+)?$/.test(text),
   ).length;
   const balanceLabelVisible = texts.some(
     (text) => text === "余额" || text.includes("账户余额"),
