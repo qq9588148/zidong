@@ -1,3 +1,3 @@
-from . import admin, auth, device_tasks
+from . import admin, assignments, auth, device_tasks, signals
 
-__all__ = ["admin", "auth", "device_tasks"]
+__all__ = ["admin", "assignments", "auth", "device_tasks", "signals"]

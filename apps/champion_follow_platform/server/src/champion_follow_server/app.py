@@ -14,6 +14,7 @@ from .security.task_signing import load_task_signer
 from .services.audit import AuditWriter
 from .services.authorization_codes import AuthorizationCodeService
 from .services.device_binding import DeviceBindingService
+from .services.device_allocator import DeviceAllocator
 from .services.device_task_revisions import DeviceTaskRevisionService
 from .services.sessions import SessionService
 from .services.task_hub import TaskHub
@@ -92,6 +93,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     preview_ttl_seconds=(
                         resolved.threshold_preview_ttl_seconds
                     ),
+                )
+                app.state.device_allocator = DeviceAllocator(
+                    seed_path=resolved.allocation_seed_path,
+                    seed_version=resolved.allocation_seed_version,
+                    threshold_service=app.state.threshold_service,
+                    revision_service=app.state.task_revision_service,
+                    clock=app.state.clock,
                 )
                 app.state.core_pool = core_pool
                 app.state.auth_sessions = auth.session_factory
