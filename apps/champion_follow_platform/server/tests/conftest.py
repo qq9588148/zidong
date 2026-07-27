@@ -1,4 +1,5 @@
 import os
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -415,7 +416,7 @@ def revision_service_factory(task_signer, clock):
 
 
 @pytest_asyncio.fixture
-async def revision_context(auth_session_factory, clock):
+async def revision_context(auth_session_factory, clock, fake_device_keypair):
     async with auth_session_factory() as session:
         account = Account(
             username_canonical=f"task-{os.urandom(8).hex()}",
@@ -428,8 +429,10 @@ async def revision_context(auth_session_factory, clock):
         await session.flush()
         device = Device(
             account_id=account.id,
-            public_key_spki_der=b"task-test-public-key",
-            public_key_fingerprint=os.urandom(32),
+            public_key_spki_der=fake_device_keypair.public_key_spki_der,
+            public_key_fingerprint=hashlib.sha256(
+                fake_device_keypair.public_key_spki_der
+            ).digest(),
             binding_epoch=1,
             status=DeviceStatus.ACTIVE,
         )

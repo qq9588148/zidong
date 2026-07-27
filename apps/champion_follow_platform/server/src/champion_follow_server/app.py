@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from .api.auth import router as auth_router
 from .api.device_ws import router as device_ws_router
+from .api.device_events import router as device_events_router
 from .config import Settings
 from .db.session import open_auth_engine
 from .security.passwords import PasswordHasher
@@ -16,6 +17,7 @@ from .services.audit import AuditWriter
 from .services.authorization_codes import AuthorizationCodeService
 from .services.device_binding import DeviceBindingService
 from .services.device_allocator import DeviceAllocator
+from .services.device_ledger import DeviceLedgerService
 from .services.device_task_revisions import DeviceTaskRevisionService
 from .services.sessions import SessionService
 from .services.task_hub import TaskHub
@@ -59,6 +61,7 @@ def configure_auth_services(
         app.state.task_signer, resolved_clock
     )
     app.state.task_hub = TaskHub()
+    app.state.device_ledger = DeviceLedgerService(resolved_clock)
     app.state.authorization_code_service = authorization_codes
     app.state.binding_service = DeviceBindingService(
         authorization_codes,
@@ -115,4 +118,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_core_routers(app)
     app.include_router(auth_router)
     app.include_router(device_ws_router)
+    app.include_router(device_events_router)
     return app

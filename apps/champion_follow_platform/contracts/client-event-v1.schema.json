@@ -1,0 +1,19 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://champion-follow.invalid/contracts/client-event-v1.schema.json",
+  "title":"Champion Follow Signed Client Event v1",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["schema_version","device_id","binding_epoch","client_seq","event_id","observed_at","type","payload","signature"],
+  "properties":{
+    "schema_version":{"const":"client-event-v1"},
+    "device_id":{"type":"string","format":"uuid"},
+    "binding_epoch":{"type":"integer","minimum":1},
+    "client_seq":{"type":"integer","minimum":1},
+    "event_id":{"type":"string","format":"uuid"},
+    "observed_at":{"type":"string","format":"date-time"},
+    "type":{"enum":["TASK_RECEIVED","EXECUTION_STATE","ORDER_CONFIRMED","ORDER_REJECTED","ORDER_UNKNOWN","SETTLEMENT_CONFIRMED","BALANCE_SNAPSHOT","BANKROLL_STATE","LATENCY_SAMPLE"]},
+    "payload":{"type":"object"},
+    "signature":{"type":"string","pattern":"^[A-Za-z0-9+/]+={0,2}$"}
+  }
+}
