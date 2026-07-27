@@ -4,6 +4,7 @@ import {
   clearPlatformSession,
   isAllowedPlatformNavigation,
   platformPartition,
+  platformUserAgent,
   platformWebPreferences,
 } from "../../src/main/platform-session";
 
@@ -18,6 +19,12 @@ describe("platform session", () => {
       sandbox: true,
       webSecurity: true,
     });
+  });
+
+  it("uses the bundled Chromium version without exposing Electron", () => {
+    const userAgent = platformUserAgent("142.0.7444.175");
+    expect(userAgent).toContain("Chrome/142.0.7444.175");
+    expect(userAgent).not.toContain("Electron");
   });
 
   it("allows only the configured HTTPS origin for top-level navigation", () => {

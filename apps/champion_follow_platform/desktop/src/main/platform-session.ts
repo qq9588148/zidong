@@ -35,11 +35,27 @@ export function getPlatformSession(deviceId: string): Session {
 export function configurePlatformSession(platformSession: Session): void {
   if (configuredSessions.has(platformSession)) return;
   configuredSessions.add(platformSession);
+  platformSession.setUserAgent(
+    platformUserAgent(process.versions.chrome),
+    "zh-CN,zh;q=0.9,en;q=0.8",
+  );
   platformSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
   platformSession.setPermissionCheckHandler(() => false);
   platformSession.on("will-download", (event) => event.preventDefault());
+}
+
+export function platformUserAgent(chromiumVersion: string): string {
+  if (!/^[0-9]+(?:\.[0-9]+){1,3}$/.test(chromiumVersion)) {
+    throw new Error("platform_chromium_version_invalid");
+  }
+  return [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "AppleWebKit/537.36 (KHTML, like Gecko)",
+    `Chrome/${chromiumVersion}`,
+    "Safari/537.36",
+  ].join(" ");
 }
 
 export function applyPlatformNavigationPolicy(

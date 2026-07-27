@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   NG_ALLOWED_ORIGINS,
   NG_ENTRY_URL,
+  NG_LOGIN_URL,
   platformWindowOptions,
 } from "../../src/main/platform-window";
 import { isAllowedPlatformNavigation } from "../../src/main/platform-session";
@@ -10,6 +11,7 @@ import { isAllowedPlatformNavigation } from "../../src/main/platform-session";
 describe("NG platform window", () => {
   it("pins the inspected entry and lobby origins", () => {
     expect(NG_ENTRY_URL).toBe("https://ng888.com/");
+    expect(NG_LOGIN_URL).toBe("https://jtyo.ngk14.com/login");
     expect(NG_ALLOWED_ORIGINS).toEqual([
       "https://ng888.com",
       "https://jtyo.ngk14.com",

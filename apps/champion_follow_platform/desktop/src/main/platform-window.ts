@@ -10,6 +10,7 @@ import {
 } from "./platform-session";
 
 export const NG_ENTRY_URL = "https://ng888.com/";
+export const NG_LOGIN_URL = "https://jtyo.ngk14.com/login";
 export const NG_ALLOWED_ORIGINS = Object.freeze([
   "https://ng888.com",
   "https://jtyo.ngk14.com",
@@ -50,6 +51,6 @@ export function openNgPlatformWindow(): BrowserWindow {
   window.on("closed", () => {
     if (platformWindow === window) platformWindow = null;
   });
-  void window.loadURL(NG_ENTRY_URL);
+  void window.loadURL(NG_LOGIN_URL);
   return window;
 }
