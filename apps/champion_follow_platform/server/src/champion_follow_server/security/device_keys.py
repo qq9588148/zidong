@@ -32,6 +32,51 @@ def enrollment_message(challenge_id: UUID, nonce: bytes) -> bytes:
     )
 
 
+def device_login_message(challenge_id: UUID, nonce: bytes) -> bytes:
+    if len(nonce) != 32:
+        raise InvalidDeviceProof("invalid device proof")
+    return (
+        b"champion-follow-device-login-v1\x00"
+        + challenge_id.bytes
+        + b"\x00"
+        + nonce
+    )
+
+
+def _canonical_p256_public_key(spki_der: bytes):
+    public_key = serialization.load_der_public_key(spki_der)
+    if not isinstance(public_key, ec.EllipticCurvePublicKey):
+        raise InvalidDeviceProof("invalid device proof")
+    if not isinstance(public_key.curve, ec.SECP256R1):
+        raise InvalidDeviceProof("invalid device proof")
+    canonical = public_key.public_bytes(
+        serialization.Encoding.DER,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    if canonical != spki_der:
+        raise InvalidDeviceProof("invalid device proof")
+    return public_key
+
+
+def verify_bound_device_signature(
+    *, public_key_spki_der: bytes, proof_der_b64: str, message: bytes
+) -> None:
+    if not 80 <= len(public_key_spki_der) <= 256:
+        raise InvalidDeviceProof("invalid device proof")
+    signature = _decode_bounded(proof_der_b64, 64, 80)
+    try:
+        public_key = _canonical_p256_public_key(public_key_spki_der)
+        public_key.verify(signature, message, ec.ECDSA(hashes.SHA256()))
+    except (
+        InvalidDeviceProof,
+        InvalidSignature,
+        UnsupportedAlgorithm,
+        ValueError,
+        TypeError,
+    ) as exc:
+        raise InvalidDeviceProof("invalid device proof") from exc
+
+
 def verify_device_proof(
     *,
     challenge_id: UUID,
@@ -42,17 +87,7 @@ def verify_device_proof(
     spki_der = _decode_bounded(public_key_spki_der_b64, 80, 256)
     signature = _decode_bounded(proof_der_b64, 64, 80)
     try:
-        public_key = serialization.load_der_public_key(spki_der)
-        if not isinstance(public_key, ec.EllipticCurvePublicKey):
-            raise InvalidDeviceProof("invalid device proof")
-        if not isinstance(public_key.curve, ec.SECP256R1):
-            raise InvalidDeviceProof("invalid device proof")
-        canonical = public_key.public_bytes(
-            serialization.Encoding.DER,
-            serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        if canonical != spki_der:
-            raise InvalidDeviceProof("invalid device proof")
+        public_key = _canonical_p256_public_key(spki_der)
         public_key.verify(
             signature,
             enrollment_message(challenge_id, nonce),

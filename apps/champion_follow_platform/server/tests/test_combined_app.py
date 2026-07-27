@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from champion_follow_server.app import create_app
 from champion_follow_server.config import Settings
@@ -11,7 +13,13 @@ def settings(tmp_path: Path) -> Settings:
     signing = tmp_path / "task-signing.pem"
     vault = tmp_path / "vault.key"
     allocation = tmp_path / "allocation-seed.key"
-    signing.write_text("fixture", encoding="utf-8")
+    signing.write_bytes(
+        Ed25519PrivateKey.from_private_bytes(bytes(range(32))).private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
     vault.write_bytes(b"v" * 32)
     allocation.write_bytes(b"a" * 32)
     return Settings(
@@ -54,6 +62,7 @@ async def test_combined_app_owns_one_core_pool_and_one_auth_session_factory(
     assert "/healthz" in paths
     assert "/v1/rankings/{market}" in paths
     assert "/v1/threshold-previews" in paths
+    assert "/api/v1/admin/session" in paths
     async with app.router.lifespan_context(app):
         assert app.state.db is core_pool
         assert app.state.core_pool is core_pool
