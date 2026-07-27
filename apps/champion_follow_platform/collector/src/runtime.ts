@@ -719,10 +719,10 @@ export async function bootstrapCollector<Credential, Server, Window>(
   steps: CollectorBootstrapSteps<Credential, Server, Window>,
 ): Promise<{ server: Server; window: Window }> {
   try {
+    await steps.openJournal();
     await steps.loadIdentity();
     const credential = await steps.loadCredential();
     const server = steps.createServer(credential);
-    await steps.openJournal();
     await steps.reconcileSession(server);
     const window = await steps.openWindow();
     await steps.startLoops(server, window);

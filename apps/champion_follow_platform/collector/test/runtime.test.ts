@@ -919,16 +919,16 @@ describe("secure collector bootstrap", () => {
     const pending = bootstrapCollector(value);
     await Promise.resolve();
     await Promise.resolve();
-    expect(order).toEqual(["identity", "credential:start"]);
+    expect(order).toEqual(["journal", "identity", "credential:start"]);
     release();
     await pending;
 
     expect(order).toEqual([
+      "journal",
       "identity",
       "credential:start",
       "credential:deleted",
       "network",
-      "journal",
       "session",
       "window",
       "loops",
@@ -947,7 +947,19 @@ describe("secure collector bootstrap", () => {
     };
 
     await expect(bootstrapCollector(value)).rejects.toThrow(code);
-    expect(order).toEqual(["identity"]);
+    expect(order).toEqual(["journal", "identity"]);
+  });
+
+  it("acquires the exclusive journal lock before identity or credential access", async () => {
+    const order: string[] = [];
+    const value = steps(order);
+    value.openJournal = async () => {
+      order.push("journal");
+      throw new Error("journal_locked");
+    };
+
+    await expect(bootstrapCollector(value)).rejects.toThrow("journal_locked");
+    expect(order).toEqual(["journal"]);
   });
 
   it("redacts an unexpected startup error", async () => {
@@ -976,10 +988,10 @@ describe("secure collector bootstrap", () => {
       "collector_start_failed",
     );
     expect(order).toEqual([
+      "journal",
       "identity",
       "credential",
       "network",
-      "journal",
       "session",
       "window",
       "cleanup",

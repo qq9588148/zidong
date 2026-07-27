@@ -90,7 +90,7 @@ export class IdentityStore {
     const encrypted = this.encryption.encryptString(key.toString("base64"));
     await writeFile(temporary, encrypted, { mode: 0o600, flag: "wx" });
     await chmod(temporary, 0o600);
-    const handle = await open(temporary, "r");
+    const handle = await open(temporary, "r+");
     try {
       await handle.sync();
     } finally {
