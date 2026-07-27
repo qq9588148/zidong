@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import stat
+import subprocess
 from uuid import UUID
 
 import pytest
@@ -12,6 +13,22 @@ from champion_follow.cli import _initialize_namespace, _register_collector
 from champion_follow.config import Settings
 from champion_follow.db import create_pool as real_create_pool
 from champion_follow.services.history_import import import_legacy
+
+
+def assert_owner_only_handoff(path):
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        return
+
+    completed = subprocess.run(
+        ["icacls.exe", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    identity = f"{os.environ['USERDOMAIN']}\\{os.environ['USERNAME']}"
+    assert identity.casefold() in completed.stdout.casefold()
+    assert "(I)" not in completed.stdout
 
 
 NAMESPACE = UUID("10000000-0000-4000-8000-000000000001")
@@ -148,7 +165,7 @@ async def test_collector_registration_keeps_only_digest_and_uses_one_time_0600_h
         "collector_id": "collector-main-01",
         "credential_handoff": str(handoff),
     }
-    assert stat.S_IMODE(handoff.stat().st_mode) == 0o600
+    assert_owner_only_handoff(handoff)
     bundle = json.loads(handoff.read_text(encoding="utf-8"))
     assert set(bundle) == {"format", "collector_id", "bearer"}
     assert bundle["format"] == "champion-collector-credential-v1"
@@ -277,10 +294,13 @@ async def test_handoff_permission_failure_closes_and_removes_the_new_file(
     await seed_active(pool)
     handoff = tmp_path / "credential.json"
 
-    def fail_fchmod(_descriptor, _mode):
+    def fail_permissions(_descriptor, _path):
         raise OSError("synthetic permission failure")
 
-    monkeypatch.setattr(os, "fchmod", fail_fchmod)
+    monkeypatch.setattr(
+        "champion_follow.cli._restrict_handoff_permissions",
+        fail_permissions,
+    )
     with pytest.raises(OSError, match="synthetic permission failure"):
         await _register_collector(
             Settings(database_url=test_database_url),
@@ -391,4 +411,4 @@ async def test_uncertain_commit_keeps_durable_handoff_for_recovery(
 
     assert await collector_count(pool) == 1
     assert handoff.exists()
-    assert stat.S_IMODE(handoff.stat().st_mode) == 0o600
+    assert_owner_only_handoff(handoff)

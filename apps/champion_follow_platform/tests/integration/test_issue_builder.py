@@ -5,6 +5,8 @@ from uuid import UUID, uuid4
 import pytest
 from psycopg import errors
 
+from champion_follow.cli import _process_ready
+from champion_follow.config import Settings
 from champion_follow.domain.integrity import evaluate_issue
 from champion_follow.repositories.issues import IssueRepository, IssueStateError
 from champion_follow.services.issue_builder import INTEGRITY_VERSION, IssueBuilder
@@ -125,6 +127,36 @@ async def seed_open_gap(pool, namespace_id, issue=ISSUE):
             "affected_issue,reason) VALUES (%s,%s,1,2,%s,'sequence_gap')",
             (uuid4(), COLLECTOR, issue),
         )
+
+
+@pytest.mark.integration
+async def test_process_ready_command_builds_pending_issues_before_causal_processing(
+    pool, test_database_url
+):
+    await seed_namespace(pool, ACTIVE, "actor-hmac-v1", "active")
+    await seed_issue(pool, ACTIVE, [bet(), close(), result()])
+
+    result_summary = await _process_ready(
+        Settings(database_url=test_database_url),
+        "actor-hmac-v1",
+    )
+
+    assert result_summary == {
+        "status": "processed",
+        "evaluated": 1,
+        "processed": 1,
+        "excluded": 0,
+        "already_processed": 0,
+    }
+    async with pool.connection() as connection:
+        status = await (
+            await connection.execute(
+                "SELECT integrity_status FROM issue_evaluations "
+                "WHERE namespace_id=%s AND issue=%s",
+                (ACTIVE, ISSUE),
+            )
+        ).fetchone()
+    assert status["integrity_status"] == "processed"
 
 
 @pytest.mark.integration

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import secrets
+import subprocess
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,7 +12,38 @@ from .config import Settings
 from .contracts.events import VERSION
 from .db import create_pool
 from .migrations import migrate
+from .repositories.issues import IssueRepository
+from .services.causal import CausalProcessor
 from .services.history_import import import_legacy
+from .services.issue_builder import IssueBuilder
+
+
+def _restrict_handoff_permissions(descriptor, path):
+    if os.name != "nt":
+        os.fchmod(descriptor, 0o600)
+        return
+
+    domain = os.environ.get("USERDOMAIN", "").strip()
+    username = os.environ.get("USERNAME", "").strip()
+    if not username:
+        raise OSError("unable to secure credential handoff")
+    identity = f"{domain}\\{username}" if domain else username
+    completed = subprocess.run(
+        [
+            "icacls.exe",
+            str(path),
+            "/inheritance:r",
+            "/grant:r",
+            f"{identity}:(R,W)",
+            "/q",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise OSError("unable to secure credential handoff")
 
 
 async def _initialize_namespace(settings, version):
@@ -75,7 +107,7 @@ async def _register_collector(
     try:
         descriptor = os.open(path, flags, 0o600)
         created = True
-        os.fchmod(descriptor, 0o600)
+        _restrict_handoff_permissions(descriptor, path)
         pool = create_pool(settings.database_url.get_secret_value())
         await pool.open(wait=True)
         await migrate(pool)
@@ -170,6 +202,48 @@ async def _import(settings, args):
         await pool.close()
 
 
+async def _process_ready(settings, namespace_version):
+    if VERSION.fullmatch(namespace_version) is None:
+        raise ValueError("invalid_namespace_version")
+
+    pool = create_pool(settings.database_url.get_secret_value())
+    await pool.open(wait=True)
+    try:
+        await migrate(pool)
+        async with pool.connection() as connection:
+            namespace = await (
+                await connection.execute(
+                    "SELECT id FROM identity_namespaces "
+                    "WHERE version=%s AND mode='active'",
+                    (namespace_version,),
+                )
+            ).fetchone()
+        if namespace is None:
+            raise ValueError("namespace_not_found")
+
+        evaluations = await IssueBuilder(IssueRepository(pool)).build_pending(
+            namespace["id"]
+        )
+        outcomes = await CausalProcessor(pool).process_ready(
+            namespace_version=namespace_version
+        )
+        return {
+            "status": "processed",
+            "evaluated": len(evaluations),
+            "processed": outcomes.count("processed"),
+            "excluded": outcomes.count("excluded"),
+            "already_processed": outcomes.count("already_processed"),
+        }
+    finally:
+        await pool.close()
+
+
+def _run(coroutine):
+    if os.name == "nt":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    return asyncio.run(coroutine)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="champion-follow")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -192,14 +266,16 @@ def main(argv=None):
         required=True,
     )
     imported.add_argument("--parser-version", required=True)
+    process = commands.add_parser("process-ready")
+    process.add_argument("--namespace-version", required=True)
     args = parser.parse_args(argv)
     settings = Settings()
     if args.command == "migrate":
-        result = asyncio.run(_migrate_only(settings))
+        result = _run(_migrate_only(settings))
     elif args.command == "init-namespace":
-        result = asyncio.run(_initialize_namespace(settings, args.version))
+        result = _run(_initialize_namespace(settings, args.version))
     elif args.command == "register-collector":
-        result = asyncio.run(
+        result = _run(
             _register_collector(
                 settings,
                 args.label,
@@ -209,8 +285,10 @@ def main(argv=None):
                 args.credential_handoff,
             )
         )
+    elif args.command == "process-ready":
+        result = _run(_process_ready(settings, args.namespace_version))
     else:
-        result = asyncio.run(_import(settings, args))
+        result = _run(_import(settings, args))
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
 
 

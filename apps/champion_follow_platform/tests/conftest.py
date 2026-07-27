@@ -1,3 +1,4 @@
+import asyncio
 import os
 from uuid import uuid4
 
@@ -8,6 +9,13 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from champion_follow.db import create_pool
 from champion_follow.migrations import migrate
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    if os.name == "nt":
+        return asyncio.WindowsSelectorEventLoopPolicy()
+    return asyncio.DefaultEventLoopPolicy()
 
 
 EXPECTED_COLUMNS = {
