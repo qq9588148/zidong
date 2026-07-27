@@ -1,8 +1,11 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  allowPlatformWindowCloseForExit,
+  getLatestPlatformPageProbe,
   isPlatformWindowOpen,
   openNgPlatformWindow,
 } from "./platform-window";
@@ -22,6 +25,8 @@ export const initialRuntimeState = (): RuntimeState => ({
 });
 
 let runtimeState = initialRuntimeState();
+let mainWindow: BrowserWindow | null = null;
+let appIsQuitting = false;
 
 export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -53,6 +58,7 @@ function registerOfflineIpc(): void {
   ipcMain.handle("champion:get-state", () => runtimeState);
   ipcMain.handle("champion:get-platform-window-state", () => ({
     open: isPlatformWindowOpen(),
+    probe: getLatestPlatformPageProbe(),
   }));
   ipcMain.handle("champion:open-platform-login", () => {
     openNgPlatformWindow();
@@ -66,32 +72,63 @@ function registerOfflineIpc(): void {
     runtimeState = { ...runtimeState, autoBet: "OFF" };
     return runtimeState;
   });
+  ipcMain.handle("champion:quit-app", () => {
+    appIsQuitting = true;
+    allowPlatformWindowCloseForExit();
+    app.quit();
+    return { ok: true };
+  });
+}
+
+function openMainWindow(): BrowserWindow {
+  if (mainWindow !== null && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    return mainWindow;
+  }
+  const window = createMainWindow();
+  mainWindow = window;
+  window.on("close", (event) => {
+    if (!appIsQuitting) {
+      event.preventDefault();
+      window.hide();
+    }
+  });
+  window.on("closed", () => {
+    if (mainWindow === window) mainWindow = null;
+  });
+  window.once("ready-to-show", () => window.show());
+  void window.loadFile(join(__dirname, "../../dist-renderer/index.html"));
+  return window;
+}
+
+function removeObsoleteProtectedSessionSnapshots(): void {
+  const directory = join(
+    app.getPath("userData"),
+    "Partitions",
+    "champion-platform-local-desktop",
+    "Protected Session",
+  );
+  for (const name of ["cookies.enc", "session-storage.enc"]) {
+    rmSync(join(directory, name), { force: true });
+  }
 }
 
 if (process.env.VITEST !== "true" && app) {
-  app.commandLine.appendSwitch("force-renderer-accessibility");
-  app.whenReady().then(() => {
-    registerOfflineIpc();
-    const window = createMainWindow();
-    window.once("ready-to-show", () => window.show());
-    void window.loadFile(
-      join(__dirname, "../../dist-renderer/index.html"),
-    );
-
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        const reopened = createMainWindow();
-        reopened.once("ready-to-show", () => reopened.show());
-        void reopened.loadFile(
-          join(__dirname, "../../dist-renderer/index.html"),
-        );
-      }
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+  } else {
+    app.commandLine.appendSwitch("force-renderer-accessibility");
+    app.on("before-quit", () => {
+      appIsQuitting = true;
+      allowPlatformWindowCloseForExit();
     });
-  });
-
-  app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") {
-      app.quit();
-    }
-  });
+    app.on("second-instance", () => openMainWindow());
+    app.whenReady().then(() => {
+      removeObsoleteProtectedSessionSnapshots();
+      registerOfflineIpc();
+      openMainWindow();
+      app.on("activate", () => openMainWindow());
+    });
+  }
 }

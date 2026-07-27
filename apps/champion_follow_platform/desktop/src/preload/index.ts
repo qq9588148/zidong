@@ -7,6 +7,21 @@ type RuntimeState = {
   highestTask: null;
 };
 
+type PlatformPageProbe = {
+  gameVisible: boolean;
+  periodCandidateCount: number;
+  countdownCandidateCount: number;
+  odds196Count: number;
+  directionTextCounts: Record<
+    "BIG" | "SMALL" | "ODD" | "EVEN" | "PRIME" | "COMPOSITE",
+    number
+  >;
+  balanceLabelVisible: boolean;
+  stakeInputCount: number;
+  betControlCount: number;
+  contractReady: boolean;
+};
+
 const api = Object.freeze({
   getState: (): Promise<RuntimeState> =>
     ipcRenderer.invoke("champion:get-state") as Promise<RuntimeState>,
@@ -15,10 +30,17 @@ const api = Object.freeze({
       "champion:set-auto-bet",
       enabled,
     ) as Promise<RuntimeState>,
-  getPlatformWindowState: (): Promise<{ open: boolean }> =>
-    ipcRenderer.invoke("champion:get-platform-window-state") as Promise<{ open: boolean }>,
+  getPlatformWindowState: (): Promise<{
+    open: boolean;
+    probe: PlatformPageProbe | null;
+  }> => ipcRenderer.invoke("champion:get-platform-window-state") as Promise<{
+    open: boolean;
+    probe: PlatformPageProbe | null;
+  }>,
   openPlatformLogin: (): Promise<{ ok: true; open: true }> =>
     ipcRenderer.invoke("champion:open-platform-login") as Promise<{ ok: true; open: true }>,
+  quitApp: (): Promise<{ ok: true }> =>
+    ipcRenderer.invoke("champion:quit-app") as Promise<{ ok: true }>,
 });
 
 contextBridge.exposeInMainWorld("championFollow", api);

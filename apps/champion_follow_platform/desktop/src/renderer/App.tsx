@@ -7,6 +7,10 @@ type RuntimeState = {
   highestTask: null;
 };
 
+type PlatformPageProbe = Awaited<
+  ReturnType<typeof window.championFollow.getPlatformWindowState>
+>["probe"];
+
 const safeState: RuntimeState = {
   generation: "starting",
   autoBet: "OFF",
@@ -17,6 +21,7 @@ const safeState: RuntimeState = {
 export function App() {
   const [state, setState] = useState<RuntimeState>(safeState);
   const [platformOpen, setPlatformOpen] = useState(false);
+  const [platformProbe, setPlatformProbe] = useState<PlatformPageProbe>(null);
   const [openingPlatform, setOpeningPlatform] = useState(false);
 
   useEffect(() => {
@@ -26,7 +31,10 @@ export function App() {
     });
     const refreshPlatform = () => {
       void window.championFollow.getPlatformWindowState().then((value) => {
-        if (active) setPlatformOpen(value.open);
+        if (active) {
+          setPlatformOpen(value.open);
+          setPlatformProbe(value.probe);
+        }
       });
     };
     refreshPlatform();
@@ -46,6 +54,20 @@ export function App() {
       setOpeningPlatform(false);
     }
   };
+
+  const quitApp = async () => {
+    if (!window.confirm("完全退出后，平台可能要求重新登录。确定退出吗？")) return;
+    await window.championFollow.quitApp();
+  };
+
+  const detectedContractParts = platformProbe === null ? 0 : [
+    platformProbe.periodCandidateCount > 0,
+    platformProbe.countdownCandidateCount > 0,
+    platformProbe.odds196Count >= 6,
+    Object.values(platformProbe.directionTextCounts).every((count) => count > 0),
+    platformProbe.balanceLabelVisible,
+    platformProbe.stakeInputCount > 0 && platformProbe.betControlCount > 0,
+  ].filter(Boolean).length;
 
   return (
     <main className="app-shell">
@@ -92,6 +114,11 @@ export function App() {
           <p className="section-label">NG 平台</p>
           <h3>手动登录平台</h3>
           <p>当前入口 ng1z.com；后期可由已认证后台安全更新。账号、密码和验证码不会进入客户端日志。</p>
+          <p>
+            页面合同：{platformProbe?.contractReady
+              ? "已完整识别（只读）"
+              : `已识别 ${detectedContractParts}/6 项（不会下注）`}
+          </p>
         </div>
         <button
           className="platform-action"
@@ -118,6 +145,9 @@ export function App() {
         <span>启动代次</span>
         <code>{state.generation === "starting" ? "正在初始化" : state.generation.slice(0, 8)}</code>
         <span className="footer-note">EXECUTION CORE READY · FAIL-CLOSED</span>
+        <button className="quit-action" type="button" onClick={() => void quitApp()}>
+          完全退出
+        </button>
       </footer>
     </main>
   );
