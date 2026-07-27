@@ -5,6 +5,9 @@ import pytest_asyncio
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from champion_follow_server.security.passwords import PasswordHasher
+from champion_follow_server.security.secrets import SecretVault
+
 
 def _test_database_url() -> str:
     value = os.environ.get("TEST_DATABASE_URL")
@@ -38,3 +41,13 @@ async def db_session(async_engine):
         finally:
             await session.close()
             await transaction.rollback()
+
+
+@pytest.fixture
+def password_hasher() -> PasswordHasher:
+    return PasswordHasher()
+
+
+@pytest.fixture
+def secret_vault() -> SecretVault:
+    return SecretVault(b"v" * 32)
