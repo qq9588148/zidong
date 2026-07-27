@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "champion-follow-server"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "alembic==1.16.4",
+  "argon2-cffi==25.1.0",
+  "asyncpg==0.30.0",
+  "cryptography==45.0.5",
+  "fastapi==0.116.1",
+  "pydantic==2.11.7",
+  "pydantic-settings==2.10.1",
+  "pyotp==2.9.0",
+  "qrcode[pil]==8.2",
+  "sqlalchemy[asyncio]==2.0.41",
+]
+
+[project.optional-dependencies]
+test = [
+  "httpx==0.28.1",
+  "jsonschema==4.25.0",
+  "pytest==8.4.1",
+  "pytest-asyncio==1.0.0",
+]
+
+[project.scripts]
+champion-admin = "champion_follow_server.cli.admin:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

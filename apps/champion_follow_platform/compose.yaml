@@ -15,5 +15,24 @@ services:
     volumes:
       - champion_follow_pgdata:/var/lib/postgresql/data
 
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      CHAMPION_DATABASE_URL: postgresql+asyncpg://champion_follow:${POSTGRES_PASSWORD}@postgres/champion_follow_test
+      CHAMPION_PUBLIC_BASE_URL: ${CHAMPION_PUBLIC_BASE_URL:-https://127.0.0.1:58443}
+      CHAMPION_TRUSTED_ADMIN_ORIGIN: ${CHAMPION_TRUSTED_ADMIN_ORIGIN:-https://127.0.0.1:58443}
+      CHAMPION_TASK_SIGNING_KEY_PATH: /run/secrets/task-signing.pem
+      CHAMPION_SECRET_VAULT_KEY_PATH: /run/secrets/vault.key
+      CHAMPION_ALLOCATION_SEED_PATH: /run/secrets/allocation-seed.key
+      CHAMPION_ALLOCATION_SEED_VERSION: ${CHAMPION_ALLOCATION_SEED_VERSION:-allocation-v1}
+      CHAMPION_TOKEN_PEPPER: ${CHAMPION_TOKEN_PEPPER:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:58000:8000"
+
 volumes:
   champion_follow_pgdata:

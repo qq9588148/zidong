@@ -16,19 +16,14 @@ from .services.rankings import RankingService
 from .services.threshold_preview import ThresholdPreviewService
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        resolved = settings or Settings()
-        async with open_pool(resolved.database_url.get_secret_value()) as pool:
-            app.state.db = pool
-            app.state.ingestion = IngestionService(IngestionRepository(pool))
-            app.state.rankings = RankingService(pool)
-            app.state.threshold_previews = ThresholdPreviewService(pool)
-            yield
+def configure_core_services(app: FastAPI, pool) -> None:
+    app.state.db = pool
+    app.state.ingestion = IngestionService(IngestionRepository(pool))
+    app.state.rankings = RankingService(pool)
+    app.state.threshold_previews = ThresholdPreviewService(pool)
 
-    app = FastAPI(title="Champion Follow Core", version="0.1.0", lifespan=lifespan)
 
+def register_core_routers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def safe_request_validation_error(_request, error):
         detail = [
@@ -41,6 +36,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ingestion_router)
     app.include_router(rankings_router)
     app.include_router(previews_router)
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        resolved = settings or Settings()
+        async with open_pool(resolved.database_url.get_secret_value()) as pool:
+            configure_core_services(app, pool)
+            yield
+
+    app = FastAPI(title="Champion Follow Core", version="0.1.0", lifespan=lifespan)
+    register_core_routers(app)
     return app
 
 
