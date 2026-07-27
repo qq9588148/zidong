@@ -1,0 +1,127 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  installRoomHook,
+  readBtcffcPageState,
+} from "../src/bridge/page-hook.js";
+
+describe("public room hook", () => {
+  it("exports only the current Btcffc issue, countdown, and phase", () => {
+    expect(
+      readBtcffcPageState([
+        {
+          paramData: { model: "Btcffc" },
+          game28Info: {
+            serial: "2607270001",
+            countdown: 1.25,
+            process: "1",
+            privateField: "must-not-leave-page",
+          },
+        },
+      ]),
+    ).toEqual({
+      issue: "2607270001",
+      countdownMs: 1_250,
+      phase: "BETTING",
+    });
+    expect(
+      readBtcffcPageState([
+        {
+          paramData: { model: "Btcffc" },
+          game28Info: {
+            serial: "2607270001",
+            countdown: 0,
+            process: "0",
+          },
+        },
+      ]),
+    ).toEqual({
+      issue: "2607270001",
+      countdownMs: 0,
+      phase: "CLOSED",
+    });
+  });
+
+  it("wraps each active room once and restores the replaced room", async () => {
+    const emitted: unknown[] = [];
+    let firstCalls = 0;
+    let secondCalls = 0;
+    const first = {
+      options: {
+        onmsgs(messages: unknown[]) {
+          firstCalls += messages.length;
+          return "first";
+        },
+      },
+    };
+    const second = {
+      options: {
+        onmsgs(messages: unknown[]) {
+          secondCalls += messages.length;
+          return "second";
+        },
+      },
+    };
+
+    expect(installRoomHook(first, (payload) => emitted.push(payload))).toBe(true);
+    expect(installRoomHook(first, (payload) => emitted.push(payload))).toBe(false);
+    expect(first.options.onmsgs([1])).toBe("first");
+    await Promise.resolve();
+    expect(firstCalls).toBe(1);
+    expect(emitted).toHaveLength(1);
+
+    expect(installRoomHook(second, (payload) => emitted.push(payload))).toBe(true);
+    first.options.onmsgs([2]);
+    second.options.onmsgs([3]);
+    await Promise.resolve();
+
+    expect(firstCalls).toBe(2);
+    expect(secondCalls).toBe(1);
+    expect(emitted).toHaveLength(2);
+  });
+
+  it("prefers the SDK protocol callback over the page callback", async () => {
+    const emitted: unknown[] = [];
+    let pageCalls = 0;
+    let protocolCalls = 0;
+    const pageCallback = () => {
+      pageCalls += 1;
+    };
+    const room = {
+      options: { onmsgs: pageCallback },
+      protocol: {
+        options: {
+          onmsgs(_messages: unknown[]) {
+            protocolCalls += 1;
+          },
+        },
+      },
+    };
+
+    expect(installRoomHook(room, (payload) => emitted.push(payload))).toBe(true);
+    room.protocol.options.onmsgs([1]);
+    await Promise.resolve();
+
+    expect(protocolCalls).toBe(1);
+    expect(pageCalls).toBe(0);
+    expect(room.options.onmsgs).toBe(pageCallback);
+    expect(emitted).toHaveLength(1);
+  });
+
+  it("captures the batch even when the page callback throws", async () => {
+    const emitted: unknown[] = [];
+    const failure = new Error("page callback failed");
+    const room = {
+      options: {
+        onmsgs(_messages: unknown[]) {
+          throw failure;
+        },
+      },
+    };
+    installRoomHook(room, (payload) => emitted.push(payload));
+
+    expect(() => room.options.onmsgs([1])).toThrow(failure);
+    await Promise.resolve();
+    expect(emitted).toHaveLength(1);
+  });
+});

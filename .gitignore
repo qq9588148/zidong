@@ -1,0 +1,47 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node / Electron
+node_modules/
+dist/
+out/
+release/
+*.tsbuildinfo
+
+# Runtime data and local databases
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
+*.jsonl
+*.ndjson
+logs/
+runs/
+data/raw/
+data/processed/
+.sandbox/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*credential-handoff*
+
+# OS / IDE / Codex worktrees
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.worktrees/

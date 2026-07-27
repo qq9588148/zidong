@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: champion_follow_test
+      POSTGRES_USER: champion_follow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD to a local test value}
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U champion_follow -d champion_follow_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - champion_follow_pgdata:/var/lib/postgresql/data
+
+volumes:
+  champion_follow_pgdata:
