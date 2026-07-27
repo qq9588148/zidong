@@ -3,3 +3,6 @@ dist-main/
 dist-renderer/
 release/
 npm-debug.log*
+native/**/bin/
+native/**/obj/
+test-results/
