@@ -42,12 +42,18 @@ export function openNgPlatformWindow(): BrowserWindow {
   const window = new BrowserWindow(platformWindowOptions());
   platformWindow = window;
   const endpoint = platformEndpointRegistry.current();
-  configurePlatformSession(window.webContents.session);
   applyPlatformNavigationPolicy(window.webContents, endpoint.allowedOrigins);
   window.once("ready-to-show", () => window.show());
   window.on("closed", () => {
     if (platformWindow === window) platformWindow = null;
   });
-  void window.loadURL(endpoint.entryUrl);
+  void configurePlatformSession(window.webContents.session)
+    .then(() => {
+      if (!window.isDestroyed()) return window.loadURL(endpoint.entryUrl);
+      return undefined;
+    })
+    .catch(() => {
+      if (!window.isDestroyed()) window.destroy();
+    });
   return window;
 }

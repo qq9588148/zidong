@@ -5,7 +5,7 @@ import {
   type WebPreferences,
 } from "electron";
 
-const configuredSessions = new WeakSet<Session>();
+const configuredSessions = new WeakMap<Session, Promise<void>>();
 
 export function platformPartition(deviceId: string): string {
   if (!/^[A-Za-z0-9._-]{1,128}$/.test(deviceId)) {
@@ -26,17 +26,20 @@ export function platformWebPreferences(deviceId: string): WebPreferences {
   };
 }
 
-export function getPlatformSession(deviceId: string): Session {
+export async function getPlatformSession(deviceId: string): Promise<Session> {
   const platformSession = session.fromPartition(platformPartition(deviceId));
-  configurePlatformSession(platformSession);
+  await configurePlatformSession(platformSession);
   return platformSession;
 }
 
-export function configurePlatformSession(platformSession: Session): void {
-  if (configuredSessions.has(platformSession)) return;
-  configuredSessions.add(platformSession);
+export function configurePlatformSession(
+  platformSession: Session,
+  chromiumVersion: string = process.versions.chrome,
+): Promise<void> {
+  const existing = configuredSessions.get(platformSession);
+  if (existing) return existing;
   platformSession.setUserAgent(
-    platformUserAgent(process.versions.chrome),
+    platformUserAgent(chromiumVersion),
     "zh-CN,zh;q=0.9,en;q=0.8",
   );
   platformSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
@@ -44,6 +47,9 @@ export function configurePlatformSession(platformSession: Session): void {
   });
   platformSession.setPermissionCheckHandler(() => false);
   platformSession.on("will-download", (event) => event.preventDefault());
+  const configured = platformSession.setProxy({ mode: "direct" });
+  configuredSessions.set(platformSession, configured);
+  return configured;
 }
 
 export function platformUserAgent(chromiumVersion: string): string {

@@ -79,7 +79,7 @@ export function App() {
           <strong className={platformOpen ? "active" : "muted"}>
             {platformOpen ? "已打开" : "未打开"}
           </strong>
-          <span>独立内置 Chromium 会话</span>
+          <span>独立内置 Chromium 会话 · 直连模式</span>
         </article>
         <article className="status-card safety">
           <p>自动执行</p><strong>关闭</strong>
