@@ -158,6 +158,22 @@ class DeviceTaskRevisionService:
             signature=base64.urlsafe_b64encode(row.signature).decode("ascii"),
         )
 
+    def wire_envelope(self, row: DeviceTaskRevision) -> dict:
+        envelope = self.signed_envelope(row)
+        return {
+            **self._unsigned(
+                task_id=row.id,
+                device_id=row.device_id,
+                period_id=row.period_id,
+                revision=row.revision,
+                action=row.action,
+                issued_at=row.issued_at,
+                expires_at=row.expires_at,
+                payload=row.payload,
+            ),
+            "signature": envelope.signature,
+        }
+
     async def _publish(
         self,
         session,

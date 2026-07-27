@@ -9,6 +9,7 @@ import pyotp
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from httpx import ASGITransport, AsyncClient
+from starlette.testclient import TestClient
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -38,6 +39,7 @@ from champion_follow_server.models.admin import (
 from champion_follow_server.security.passwords import PasswordHasher
 from champion_follow_server.security.secrets import SecretDigester, SecretVault
 from champion_follow_server.security.task_signing import TaskSigner
+from champion_follow_server.schemas.device_tasks import BetPayload
 from champion_follow_server.services.audit import AuditWriter
 from champion_follow_server.services.authorization_codes import (
     AuthorizationCodeService,
@@ -209,6 +211,7 @@ async def test_app(
         public_base_url="https://console.example.test",
         trusted_admin_origin="https://console.example.test",
         task_signing_key_path=signing,
+        task_signing_key_version="test-v1",
         secret_vault_key_path=vault,
         allocation_seed_path=allocation,
         token_pepper="test-only-token-pepper-with-more-than-32-bytes",
@@ -479,6 +482,110 @@ async def revision_context(auth_session_factory, clock):
             await cleanup.execute(
                 delete(ThresholdPreview).where(ThresholdPreview.id == preview.id)
             )
+            await cleanup.execute(delete(Device).where(Device.id == device.id))
+            await cleanup.execute(delete(Account).where(Account.id == account.id))
+            await cleanup.commit()
+
+
+@pytest_asyncio.fixture
+async def device_access_token(
+    auth_session_factory, test_app, revision_context
+):
+    device, _threshold = revision_context
+    async with auth_session_factory() as session:
+        account = await session.get(Account, device.account_id)
+        bound_device = await session.get(Device, device.id)
+        pair = await test_app.state.session_service.issue(
+            session,
+            account=account,
+            kind=SessionKind.USER,
+            device=bound_device,
+        )
+        await session.commit()
+    return pair.access_token
+
+
+@pytest_asyncio.fixture
+async def committed_bet_then_cancel(
+    auth_session_factory, revision_context, revision_service, clock
+):
+    device, threshold = revision_context
+    async with auth_session_factory() as session:
+        await revision_service.publish_bet(
+            session,
+            device_id=device.id,
+            period_id="2607270001",
+            payload=BetPayload(
+                signal_id="00000000-0000-0000-0000-000000000010",
+                signal_version=1,
+                actor_ref="A000007",
+                ball=2,
+                direction="ODD",
+                threshold_version=threshold.config_version,
+                odds_micros=1_960_000,
+                user_level="CORE",
+                sample_count=618,
+                conservative_win_rate="0.5431000000",
+                conservative_unit_return="0.0645000000",
+                followable_rate="0.8120000000",
+            ),
+            expires_at=clock.now() + timedelta(minutes=10),
+        )
+        cancel = await revision_service.publish_cancel(
+            session,
+            device_id=device.id,
+            period_id="2607270001",
+            reason="global_stop",
+            expires_at=clock.now() + timedelta(minutes=10),
+        )
+        await session.commit()
+        return cancel
+
+
+@pytest_asyncio.fixture
+async def ws_client(test_app):
+    client = TestClient(test_app)
+    try:
+        yield client
+    finally:
+        client.close()
+
+
+@pytest_asyncio.fixture
+async def other_device_task(
+    auth_session_factory, revision_service, clock
+):
+    async with auth_session_factory() as session:
+        account = Account(
+            username_canonical=f"other-task-{os.urandom(8).hex()}",
+            password_hash="test-hash",
+            role=AccountRole.USER,
+            status=AccountStatus.ACTIVE,
+            admin_slot=None,
+        )
+        session.add(account)
+        await session.flush()
+        device = Device(
+            account_id=account.id,
+            public_key_spki_der=b"other-task-public-key",
+            public_key_fingerprint=os.urandom(32),
+            binding_epoch=1,
+            status=DeviceStatus.ACTIVE,
+        )
+        session.add(device)
+        await session.flush()
+        task = await revision_service.publish_cancel(
+            session,
+            device_id=device.id,
+            period_id="other-device-period",
+            reason="global_stop",
+            expires_at=clock.now() + timedelta(minutes=10),
+        )
+        await session.commit()
+    try:
+        yield task
+    finally:
+        async with auth_session_factory() as cleanup:
             await cleanup.execute(delete(Device).where(Device.id == device.id))
             await cleanup.execute(delete(Account).where(Account.id == account.id))
             await cleanup.commit()

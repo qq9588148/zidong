@@ -6,6 +6,7 @@ from champion_follow.main import configure_core_services, register_core_routers
 from fastapi import FastAPI
 
 from .api.auth import router as auth_router
+from .api.device_ws import router as device_ws_router
 from .config import Settings
 from .db.session import open_auth_engine
 from .security.passwords import PasswordHasher
@@ -113,4 +114,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = resolved
     register_core_routers(app)
     app.include_router(auth_router)
+    app.include_router(device_ws_router)
     return app
