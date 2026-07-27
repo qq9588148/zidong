@@ -8,13 +8,9 @@ import {
   configurePlatformSession,
   platformWebPreferences,
 } from "./platform-session";
+import { PlatformEndpointRegistry } from "./platform-endpoint-config";
 
-export const NG_ENTRY_URL = "https://ng888.com/";
-export const NG_LOGIN_URL = "https://jtyo.ngk14.com/login";
-export const NG_ALLOWED_ORIGINS = Object.freeze([
-  "https://ng888.com",
-  "https://jtyo.ngk14.com",
-]);
+export const platformEndpointRegistry = new PlatformEndpointRegistry();
 
 let platformWindow: BrowserWindow | null = null;
 
@@ -45,12 +41,13 @@ export function openNgPlatformWindow(): BrowserWindow {
 
   const window = new BrowserWindow(platformWindowOptions());
   platformWindow = window;
+  const endpoint = platformEndpointRegistry.current();
   configurePlatformSession(window.webContents.session);
-  applyPlatformNavigationPolicy(window.webContents, NG_ALLOWED_ORIGINS);
+  applyPlatformNavigationPolicy(window.webContents, endpoint.allowedOrigins);
   window.once("ready-to-show", () => window.show());
   window.on("closed", () => {
     if (platformWindow === window) platformWindow = null;
   });
-  void window.loadURL(NG_LOGIN_URL);
+  void window.loadURL(endpoint.entryUrl);
   return window;
 }

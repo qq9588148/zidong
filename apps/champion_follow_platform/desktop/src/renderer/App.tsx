@@ -91,7 +91,7 @@ export function App() {
         <div>
           <p className="section-label">NG 平台</p>
           <h3>手动登录平台</h3>
-          <p>固定入口 ng888.com；账号、密码和验证码不会进入客户端日志。</p>
+          <p>当前入口 ng1z.com；后期可由已认证后台安全更新。账号、密码和验证码不会进入客户端日志。</p>
         </div>
         <button
           className="platform-action"

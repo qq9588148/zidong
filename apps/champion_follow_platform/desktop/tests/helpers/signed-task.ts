@@ -37,6 +37,13 @@ export const signingKeysResponse: TaskSigningKeysResponse = {
   }],
 };
 
+export function signCanonicalValue(value: unknown): string {
+  return sign(null, canonicalTaskBytes(value), privateKey)
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_");
+}
+
 const baseTask = {
   task_id: "00000000-0000-0000-0000-000000000010",
   device_id: DEVICE_A,
@@ -76,9 +83,6 @@ export function signedTask(
   if (draft.action === "CANCEL" && !overrides.payload) {
     draft.payload = { reason: "global_stop" };
   }
-  const signature = sign(null, canonicalTaskBytes(draft), privateKey)
-    .toString("base64")
-    .replaceAll("+", "-")
-    .replaceAll("/", "_");
+  const signature = signCanonicalValue(draft);
   return { ...draft, signature } as DeviceTaskEnvelope;
 }

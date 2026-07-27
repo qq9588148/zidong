@@ -1,28 +1,23 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  NG_ALLOWED_ORIGINS,
-  NG_ENTRY_URL,
-  NG_LOGIN_URL,
+  platformEndpointRegistry,
   platformWindowOptions,
 } from "../../src/main/platform-window";
 import { isAllowedPlatformNavigation } from "../../src/main/platform-session";
 
 describe("NG platform window", () => {
-  it("pins the inspected entry and lobby origins", () => {
-    expect(NG_ENTRY_URL).toBe("https://ng888.com/");
-    expect(NG_LOGIN_URL).toBe("https://jtyo.ngk14.com/login");
-    expect(NG_ALLOWED_ORIGINS).toEqual([
-      "https://ng888.com",
-      "https://jtyo.ngk14.com",
-    ]);
+  it("uses the inspected ng1z entry and same-origin navigation policy", () => {
+    const endpoint = platformEndpointRegistry.current();
+    expect(endpoint.entryUrl).toBe("https://ng1z.com/");
+    expect(endpoint.allowedOrigins).toEqual(["https://ng1z.com"]);
     expect(isAllowedPlatformNavigation(
-      "https://jtyo.ngk14.com/login",
-      NG_ALLOWED_ORIGINS,
+      "https://ng1z.com/home",
+      endpoint.allowedOrigins,
     )).toBe(true);
     expect(isAllowedPlatformNavigation(
       "https://teqs3ws.szjiemeng.com/ng/h5_static/js/index.js",
-      NG_ALLOWED_ORIGINS,
+      endpoint.allowedOrigins,
     )).toBe(false);
   });
 

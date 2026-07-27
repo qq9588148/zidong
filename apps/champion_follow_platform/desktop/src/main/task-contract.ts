@@ -177,12 +177,24 @@ export class TrustedTaskSigningKeys {
   }
 
   verify(task: DeviceTaskEnvelope): boolean {
-    const key = this.keys.get(task.signing_key_version);
-    if (!key) return false;
-    const signature = decodeTaskSignature(task.signature);
-    if (!signature) return false;
     const { signature: _signature, ...unsigned } = task;
-    return verify(null, canonicalTaskBytes(unsigned), key, signature);
+    return this.verifyDetached(
+      task.signing_key_version,
+      unsigned,
+      task.signature,
+    );
+  }
+
+  verifyDetached(
+    signingKeyVersion: string,
+    unsignedValue: unknown,
+    encodedSignature: string,
+  ): boolean {
+    const key = this.keys.get(signingKeyVersion);
+    if (!key) return false;
+    const signature = decodeTaskSignature(encodedSignature);
+    if (!signature) return false;
+    return verify(null, canonicalTaskBytes(unsignedValue), key, signature);
   }
 }
 
