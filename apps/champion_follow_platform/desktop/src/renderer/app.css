@@ -1,0 +1,50 @@
+:root {
+  color: #eaf2ff;
+  background: #07111f;
+  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 80% 0%, #17365c 0, #07111f 42%); }
+button, input { font: inherit; }
+
+.app-shell { width: min(1120px, calc(100% - 64px)); margin: 0 auto; padding: 42px 0 30px; }
+.topbar { display: flex; align-items: center; gap: 16px; }
+.brand-mark { display: grid; place-items: center; width: 50px; height: 50px; border: 1px solid #4ea1ff; border-radius: 15px; background: linear-gradient(145deg, #1375da, #123b6e); font-weight: 800; letter-spacing: .05em; box-shadow: 0 12px 35px #006ed944; }
+.eyebrow, .section-label { margin: 0 0 4px; color: #72b8ff; font-size: 12px; font-weight: 700; letter-spacing: .18em; }
+h1 { margin: 0; font-size: 22px; }
+.mode-pill { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid #2e6394; border-radius: 999px; color: #b8d9fa; background: #0b2036cc; font-size: 13px; }
+.mode-pill span { width: 8px; height: 8px; border-radius: 50%; background: #5eafef; box-shadow: 0 0 0 5px #2d83c733; }
+
+.hero-card, .control-card, .status-card { border: 1px solid #214565; background: linear-gradient(145deg, #10273ddd, #0a192bdd); box-shadow: 0 18px 50px #02081344; }
+.hero-card { margin-top: 42px; padding: 38px 40px; border-radius: 24px; display: flex; align-items: center; justify-content: space-between; }
+h2 { margin: 10px 0 8px; font-size: 34px; }
+.hero-copy { margin: 0; max-width: 620px; color: #a9bfd5; line-height: 1.7; }
+.shield { display: grid; place-items: center; width: 78px; height: 78px; border-radius: 26px; color: #82e6bc; background: #123e37; border: 1px solid #2a806a; font-size: 34px; font-weight: 800; }
+
+.status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 20px; }
+.status-card { padding: 24px; border-radius: 18px; }
+.status-card p { margin: 0 0 14px; color: #87a7c4; font-size: 13px; }
+.status-card strong { display: block; margin-bottom: 8px; color: #9ed1ff; font-size: 25px; }
+.status-card strong.muted { color: #d1deea; }
+.status-card span { color: #718da7; font-size: 12px; }
+.status-card.safety { border-color: #236653; }
+.status-card.safety strong { color: #77e3b5; }
+
+.control-card { margin-top: 20px; padding: 26px 30px; border-radius: 18px; display: flex; align-items: center; justify-content: space-between; }
+.control-card h3 { margin: 5px 0 7px; font-size: 20px; }
+.control-card p:last-child { margin: 0; color: #839db6; }
+.control-card button { min-height: 46px; padding: 0 20px; border: 1px solid #2a6757; border-radius: 12px; color: #85d7b8; background: #12372f; font-weight: 700; cursor: not-allowed; opacity: 1; }
+
+footer { display: flex; align-items: center; gap: 10px; padding: 20px 4px 0; color: #55728e; font-size: 12px; }
+footer code { color: #8da9c4; }
+.footer-note { margin-left: auto; letter-spacing: .12em; }
+
+@media (max-width: 820px) {
+  .app-shell { width: min(100% - 32px, 720px); padding-top: 24px; }
+  .status-grid { grid-template-columns: 1fr; }
+  .hero-card { padding: 28px; }
+  .shield { display: none; }
+  .control-card { align-items: stretch; flex-direction: column; gap: 20px; }
+}

@@ -1,0 +1,63 @@
+{
+  "name": "champion-follow-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline-first Champion Follow Windows desktop client",
+  "main": "dist-main/main/index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.main.json && vite build",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "start": "npm run build && electron .",
+    "dist:win:dir": "npm run build && electron-builder --win dir --x64",
+    "dist:win:portable": "npm run build && electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "6.0.4",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vite": "8.1.5",
+    "ws": "8.18.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/ws": "8.18.1",
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3",
+    "jsdom": "29.1.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  },
+  "build": {
+    "appId": "com.championfollow.desktop",
+    "productName": "Champion Follow",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-main/**/*",
+      "dist-renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "dir",
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "Champion-Follow-Portable-${version}.${ext}"
+    }
+  }
+}
