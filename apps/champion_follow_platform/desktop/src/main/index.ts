@@ -69,6 +69,7 @@ function registerOfflineIpc(): void {
 }
 
 if (process.env.VITEST !== "true" && app) {
+  app.commandLine.appendSwitch("force-renderer-accessibility");
   app.whenReady().then(() => {
     registerOfflineIpc();
     const window = createMainWindow();
