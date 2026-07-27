@@ -2,6 +2,11 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
+import {
+  isPlatformWindowOpen,
+  openNgPlatformWindow,
+} from "./platform-window";
+
 export type RuntimeState = {
   generation: string;
   autoBet: "OFF" | "ON";
@@ -46,6 +51,13 @@ export function createMainWindow(): BrowserWindow {
 
 function registerOfflineIpc(): void {
   ipcMain.handle("champion:get-state", () => runtimeState);
+  ipcMain.handle("champion:get-platform-window-state", () => ({
+    open: isPlatformWindowOpen(),
+  }));
+  ipcMain.handle("champion:open-platform-login", () => {
+    openNgPlatformWindow();
+    return { ok: true, open: true };
+  });
   ipcMain.handle("champion:set-auto-bet", (_event, enabled: unknown) => {
     // Offline shell cannot arm execution. It may only reaffirm the safe OFF state.
     if (enabled !== false) {

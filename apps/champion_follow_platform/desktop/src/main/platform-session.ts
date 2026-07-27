@@ -5,6 +5,8 @@ import {
   type WebPreferences,
 } from "electron";
 
+const configuredSessions = new WeakSet<Session>();
+
 export function platformPartition(deviceId: string): string {
   if (!/^[A-Za-z0-9._-]{1,128}$/.test(deviceId)) {
     throw new Error("platform_device_identifier_invalid");
@@ -31,6 +33,8 @@ export function getPlatformSession(deviceId: string): Session {
 }
 
 export function configurePlatformSession(platformSession: Session): void {
+  if (configuredSessions.has(platformSession)) return;
+  configuredSessions.add(platformSession);
   platformSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
@@ -40,12 +44,12 @@ export function configurePlatformSession(platformSession: Session): void {
 
 export function applyPlatformNavigationPolicy(
   webContents: WebContents,
-  allowedOrigin: string,
+  allowedOrigins: string | readonly string[],
 ): void {
-  validateAllowedOrigin(allowedOrigin);
+  const origins = normalizeOrigins(allowedOrigins);
   webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   const guard = (event: Electron.Event, target: string) => {
-    if (!isAllowedPlatformNavigation(target, allowedOrigin)) event.preventDefault();
+    if (!isAllowedPlatformNavigation(target, origins)) event.preventDefault();
   };
   webContents.on("will-navigate", guard);
   webContents.on("will-redirect", guard);
@@ -53,15 +57,24 @@ export function applyPlatformNavigationPolicy(
 
 export function isAllowedPlatformNavigation(
   target: string,
-  allowedOrigin: string,
+  allowedOrigins: string | readonly string[],
 ): boolean {
   try {
-    validateAllowedOrigin(allowedOrigin);
+    const origins = normalizeOrigins(allowedOrigins);
     const url = new URL(target);
-    return url.protocol === "https:" && url.origin === allowedOrigin;
+    return url.protocol === "https:" && origins.includes(url.origin);
   } catch {
     return false;
   }
+}
+
+function normalizeOrigins(origins: string | readonly string[]): readonly string[] {
+  const values = typeof origins === "string" ? [origins] : [...origins];
+  if (values.length === 0 || new Set(values).size !== values.length) {
+    throw new Error("platform_origin_invalid");
+  }
+  for (const origin of values) validateAllowedOrigin(origin);
+  return values;
 }
 
 export async function clearPlatformSession(platformSession: Pick<

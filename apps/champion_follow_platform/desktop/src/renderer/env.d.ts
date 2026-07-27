@@ -9,5 +9,7 @@ interface Window {
   championFollow: {
     getState(): Promise<ChampionRuntimeState>;
     setAutoBet(enabled: boolean): Promise<ChampionRuntimeState>;
+    getPlatformWindowState(): Promise<{ open: boolean }>;
+    openPlatformLogin(): Promise<{ ok: true; open: true }>;
   };
 }

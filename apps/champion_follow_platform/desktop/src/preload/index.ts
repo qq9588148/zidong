@@ -15,6 +15,10 @@ const api = Object.freeze({
       "champion:set-auto-bet",
       enabled,
     ) as Promise<RuntimeState>,
+  getPlatformWindowState: (): Promise<{ open: boolean }> =>
+    ipcRenderer.invoke("champion:get-platform-window-state") as Promise<{ open: boolean }>,
+  openPlatformLogin: (): Promise<{ ok: true; open: true }> =>
+    ipcRenderer.invoke("champion:open-platform-login") as Promise<{ ok: true; open: true }>,
 });
 
 contextBridge.exposeInMainWorld("championFollow", api);

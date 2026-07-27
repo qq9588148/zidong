@@ -17,7 +17,7 @@ h1 { margin: 0; font-size: 22px; }
 .mode-pill { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid #2e6394; border-radius: 999px; color: #b8d9fa; background: #0b2036cc; font-size: 13px; }
 .mode-pill span { width: 8px; height: 8px; border-radius: 50%; background: #5eafef; box-shadow: 0 0 0 5px #2d83c733; }
 
-.hero-card, .control-card, .status-card { border: 1px solid #214565; background: linear-gradient(145deg, #10273ddd, #0a192bdd); box-shadow: 0 18px 50px #02081344; }
+.hero-card, .control-card, .platform-card, .status-card { border: 1px solid #214565; background: linear-gradient(145deg, #10273ddd, #0a192bdd); box-shadow: 0 18px 50px #02081344; }
 .hero-card { margin-top: 42px; padding: 38px 40px; border-radius: 24px; display: flex; align-items: center; justify-content: space-between; }
 h2 { margin: 10px 0 8px; font-size: 34px; }
 .hero-copy { margin: 0; max-width: 620px; color: #a9bfd5; line-height: 1.7; }
@@ -28,14 +28,20 @@ h2 { margin: 10px 0 8px; font-size: 34px; }
 .status-card p { margin: 0 0 14px; color: #87a7c4; font-size: 13px; }
 .status-card strong { display: block; margin-bottom: 8px; color: #9ed1ff; font-size: 25px; }
 .status-card strong.muted { color: #d1deea; }
+.status-card strong.active { color: #77e3b5; }
 .status-card span { color: #718da7; font-size: 12px; }
 .status-card.safety { border-color: #236653; }
 .status-card.safety strong { color: #77e3b5; }
 
-.control-card { margin-top: 20px; padding: 26px 30px; border-radius: 18px; display: flex; align-items: center; justify-content: space-between; }
-.control-card h3 { margin: 5px 0 7px; font-size: 20px; }
-.control-card p:last-child { margin: 0; color: #839db6; }
-.control-card button { min-height: 46px; padding: 0 20px; border: 1px solid #2a6757; border-radius: 12px; color: #85d7b8; background: #12372f; font-weight: 700; cursor: not-allowed; opacity: 1; }
+.control-card, .platform-card { margin-top: 20px; padding: 26px 30px; border-radius: 18px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.control-card h3, .platform-card h3 { margin: 5px 0 7px; font-size: 20px; }
+.control-card p:last-child, .platform-card p:last-child { margin: 0; color: #839db6; }
+.control-card button, .platform-card button { min-height: 46px; padding: 0 20px; border-radius: 12px; font-weight: 700; opacity: 1; }
+.control-card button { border: 1px solid #2a6757; color: #85d7b8; background: #12372f; cursor: not-allowed; }
+.platform-action { border: 1px solid #3a83c7; color: #eaf5ff; background: linear-gradient(135deg, #176fc1, #14528b); cursor: pointer; white-space: nowrap; box-shadow: 0 10px 24px #006ed933; }
+.platform-action:hover:not(:disabled) { filter: brightness(1.12); }
+.platform-action:focus-visible { outline: 3px solid #7fc2ff; outline-offset: 3px; }
+.platform-action:disabled { cursor: wait; opacity: .7; }
 
 footer { display: flex; align-items: center; gap: 10px; padding: 20px 4px 0; color: #55728e; font-size: 12px; }
 footer code { color: #8da9c4; }
@@ -46,5 +52,5 @@ footer code { color: #8da9c4; }
   .status-grid { grid-template-columns: 1fr; }
   .hero-card { padding: 28px; }
   .shield { display: none; }
-  .control-card { align-items: stretch; flex-direction: column; gap: 20px; }
+  .control-card, .platform-card { align-items: stretch; flex-direction: column; gap: 20px; }
 }
