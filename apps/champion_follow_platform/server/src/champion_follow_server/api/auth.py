@@ -290,7 +290,6 @@ async def admin_login(
             db_session,
             username=body.username,
             password=body.password.get_secret_value(),
-            code=body.totp.get_secret_value(),
         )
         await db_session.commit()
     except AuthenticationFailed:

@@ -185,7 +185,6 @@ async def test_complete_auth_admin_task_stop_and_reporting_flow(
         json={
             "username": "e2e-owner",
             "password": ADMIN_PASSWORD,
-            "totp": pyotp.TOTP(seed).at(clock.now()),
         },
         headers={"Origin": ADMIN_ORIGIN},
     )

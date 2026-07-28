@@ -10,7 +10,6 @@ from champion_follow_server.models.auth import (
     Account,
     AccountRole,
     AccountStatus,
-    AdminTotp,
     AuthSession,
     Device,
     DeviceLoginChallenge,
@@ -24,7 +23,6 @@ from champion_follow_server.security.device_keys import (
 )
 from champion_follow_server.security.passwords import PasswordHasher
 from champion_follow_server.security.secrets import SecretDigester, SecretVault
-from champion_follow_server.security.totp import TotpVerifier
 
 
 class AuthenticationFailed(RuntimeError):
@@ -66,7 +64,6 @@ class SessionService:
     ) -> None:
         self._digester = digester
         self._password_hasher = password_hasher
-        self._totp = TotpVerifier(vault)
         self._clock = clock
         self._access_ttl = timedelta(seconds=access_ttl_seconds)
         self._refresh_ttl = timedelta(seconds=refresh_ttl_seconds)
@@ -310,7 +307,6 @@ class SessionService:
         *,
         username: str,
         password: str,
-        code: str,
     ) -> SessionTokenPair:
         canonical = self._canonical_username(username)
         account = await session.scalar(
@@ -327,20 +323,11 @@ class SessionService:
             or self._is_locked(account)
         ):
             raise AuthenticationFailed("authentication required")
-        totp = await session.get(AdminTotp, account.id)
-        if (
-            totp is None
-            or totp.confirmed_at is None
-            or not self._password_hasher.verify(account.password_hash, password)
-        ):
+        if not self._password_hasher.verify(account.password_hash, password):
             self._record_failure(account)
             await session.flush()
             raise AuthenticationFailed("authentication required")
-        if not self._totp.verify(
-            account=account, totp=totp, code=code, now=self._clock.now()
-        ):
-            await session.flush()
-            raise AuthenticationFailed("authentication required")
+        self._reset_failures(account)
         return await self.issue(
             session, account=account, kind=SessionKind.ADMIN
         )

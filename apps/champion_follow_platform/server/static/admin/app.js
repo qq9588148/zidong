@@ -102,7 +102,6 @@ function resetSession() {
   byId("dashboard-shell").hidden = true;
   byId("login-panel").hidden = false;
   byId("login-password").value = "";
-  byId("login-totp").value = "";
   byId("authorization-code-value").textContent = "";
 }
 
@@ -208,7 +207,6 @@ async function login(event) {
       body: JSON.stringify({
         username: byId("login-username").value.trim(),
         password: byId("login-password").value,
-        totp: byId("login-totp").value.trim(),
       }),
       credentials: "same-origin",
       cache: "no-store",
@@ -218,11 +216,10 @@ async function login(event) {
     accessToken = body.access_token;
     csrfToken = body.csrf_token;
     byId("login-password").value = "";
-    byId("login-totp").value = "";
     showDashboard();
     await loadDashboard();
   } catch (_error) {
-    showMessage("login-message", "登录失败，请检查账号、密码和双重验证码。");
+    showMessage("login-message", "登录失败，请检查账号和密码。");
   } finally {
     byId("login-password").value = "";
     setBusy(button, false);

@@ -25,14 +25,13 @@ from champion_follow_server.services.thresholds import ThresholdService
 
 @pytest.fixture
 async def admin_headers(
-    client, current_admin_otp, auth_session_factory, confirmed_admin
+    client, auth_session_factory, confirmed_admin
 ):
     response = await client.post(
         "/api/v1/admin/session",
         json={
             "username": "owner",
             "password": "test-admin-password-with-16-chars",
-            "totp": current_admin_otp,
         },
         headers={"Origin": "https://console.example.test"},
     )

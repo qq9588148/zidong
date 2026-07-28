@@ -75,7 +75,6 @@ class UserSessionResponse(StrictSchema):
 class AdminLoginRequest(StrictSchema):
     username: str = Field(min_length=3, max_length=80)
     password: SecretStr = Field(min_length=16, max_length=128, repr=False)
-    totp: SecretStr = Field(min_length=6, max_length=6, repr=False)
 
 
 class AdminSessionResponse(StrictSchema):

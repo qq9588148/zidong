@@ -1,7 +1,16 @@
 import pytest
-import pyotp
 
 from champion_follow_server.models.auth import DeviceStatus
+from champion_follow_server.schemas.auth import AdminLoginRequest
+
+
+def test_admin_login_request_is_password_only() -> None:
+    request = AdminLoginRequest(
+        username="owner",
+        password="test-admin-password-with-16-chars",
+    )
+
+    assert set(request.model_dump()) == {"username", "password"}
 
 
 @pytest.mark.asyncio
@@ -35,15 +44,14 @@ async def test_user_login_requires_password_and_bound_device_proof(
 
 
 @pytest.mark.asyncio
-async def test_admin_login_requires_totp_and_uses_httponly_refresh_cookie(
-    client, confirmed_admin, current_admin_otp
+async def test_admin_login_uses_password_and_httponly_refresh_cookie(
+    client, confirmed_admin
 ) -> None:
     response = await client.post(
         "/api/v1/admin/session",
         json={
             "username": "owner",
             "password": "test-admin-password-with-16-chars",
-            "totp": current_admin_otp,
         },
         headers={"Origin": "https://console.example.test"},
     )
@@ -126,7 +134,7 @@ async def test_device_unbind_invalidates_access_immediately(
 async def test_five_bad_admin_logins_lock_for_fifteen_minutes(
     client, confirmed_admin, clock
 ) -> None:
-    _account, seed = confirmed_admin
+    _account, _seed = confirmed_admin
     origin = {"Origin": "https://console.example.test"}
     for _ in range(5):
         response = await client.post(
@@ -134,7 +142,6 @@ async def test_five_bad_admin_logins_lock_for_fifteen_minutes(
             json={
                 "username": "owner",
                 "password": "wrong-test-password-with-16-chars",
-                "totp": pyotp.TOTP(seed).at(clock.now()),
             },
             headers=origin,
         )
@@ -145,7 +152,6 @@ async def test_five_bad_admin_logins_lock_for_fifteen_minutes(
         json={
             "username": "owner",
             "password": "test-admin-password-with-16-chars",
-            "totp": pyotp.TOTP(seed).at(clock.now()),
         },
         headers=origin,
     )
@@ -157,7 +163,6 @@ async def test_five_bad_admin_logins_lock_for_fifteen_minutes(
         json={
             "username": "owner",
             "password": "test-admin-password-with-16-chars",
-            "totp": pyotp.TOTP(seed).at(clock.now()),
         },
         headers=origin,
     )
