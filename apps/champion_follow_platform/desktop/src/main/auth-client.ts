@@ -163,6 +163,10 @@ export class DeviceAuthClient {
     return { ...this.state };
   }
 
+  deviceId(): string | null {
+    return this.identity?.deviceId ?? null;
+  }
+
   async initialize(): Promise<void> {
     try {
       const identity = await this.options.store.load();
@@ -301,6 +305,42 @@ export class DeviceAuthClient {
     this.state = stateFor(this.identity, "ONLINE", null);
     if (this.access === null) throw new Error("device_auth_required");
     return this.access;
+  }
+
+  async taskSigningKeys(): Promise<unknown> {
+    const accessToken = await this.accessToken();
+    let response: Response;
+    try {
+      response = await this.fetchImpl(new URL(
+        "/api/v1/auth/task-signing-keys",
+        this.baseUrl,
+      ), {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+    if (!response.ok ||
+        !response.headers.get("content-type")?.toLowerCase()
+          .includes("application/json")) {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
   }
 
   private async authenticate(

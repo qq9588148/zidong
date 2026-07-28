@@ -6,6 +6,7 @@ import { DeviceAuthClient, JsonDeviceIdentityStore } from "./auth-client";
 import { registerClientIpc } from "./ipc-handlers";
 import { createNativeHelper } from "./native-helper-runtime";
 import { desktopPaths } from "./paths";
+import { ReadonlySignalFeed } from "./signal-feed";
 import {
   allowPlatformWindowCloseForExit,
   getLatestPlatformPageProbe,
@@ -19,6 +20,7 @@ export { initialRuntimeState };
 const DEFAULT_SERVER_BASE_URL = "https://101.37.172.66:8443";
 let mainWindow: BrowserWindow | null = null;
 let appIsQuitting = false;
+let signalFeed: ReadonlySignalFeed | null = null;
 
 export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -94,6 +96,7 @@ if (process.env.VITEST !== "true" && app) {
     app.commandLine.appendSwitch("force-renderer-accessibility");
     app.on("before-quit", () => {
       appIsQuitting = true;
+      signalFeed?.stop();
       allowPlatformWindowCloseForExit();
     });
     app.on("second-instance", () => openMainWindow());
@@ -105,9 +108,15 @@ if (process.env.VITEST !== "true" && app) {
           join(desktopPaths().profile, "device-identity.json"),
         ),
       });
-      const controller = new AppController(authClient);
+      signalFeed = new ReadonlySignalFeed({
+        serverBaseUrl: DEFAULT_SERVER_BASE_URL,
+        auth: authClient,
+        periodId: () => getLatestPlatformPageProbe()?.currentPeriodId ?? null,
+      });
+      const controller = new AppController(authClient, signalFeed);
       registerAppIpc(controller);
       openMainWindow();
+      signalFeed.start();
       void controller.initialize();
       app.on("activate", () => openMainWindow());
     });

@@ -10,6 +10,7 @@ import {
 } from "../../src/main/auth-client";
 import { appRefreshTarget, type DeviceRegistrationProof } from "../../src/main/device-identity";
 import type { NativeHelper } from "../../src/main/native-helper";
+import { signingKeysResponse } from "../helpers/signed-task";
 
 const BIND_CHALLENGE = "00112233-4455-4677-8899-aabbccddeeff";
 const LOGIN_CHALLENGE = "11112222-3333-4444-aaaa-bbbbccccdddd";
@@ -195,5 +196,49 @@ describe("DeviceAuthClient", () => {
       helper: new FakeNativeHelper(),
       store: new MemoryIdentityStore(),
     })).toThrow("auth_server_tls_required");
+  });
+
+  it("fetches public task keys with an authorization header, never a URL token", async () => {
+    const metadata: DeviceIdentityMetadata = {
+      version: 1,
+      serverBaseUrl: "https://server.example.test:8443",
+      accountId: ACCOUNT_ID,
+      deviceId: DEVICE_ID,
+      localId: LOCAL_ID,
+      username: "first-user",
+    };
+    const store = new MemoryIdentityStore(metadata);
+    const helper = new FakeNativeHelper();
+    helper.credentials.set(appRefreshTarget(DEVICE_ID), REFRESH_TOKEN);
+    const requests: Array<{ url: string; authorization: string | null }> = [];
+    const client = new DeviceAuthClient({
+      baseUrl: metadata.serverBaseUrl,
+      helper,
+      store,
+      fetch: async (input, init) => {
+        const url = String(input);
+        requests.push({
+          url,
+          authorization: new Headers(init?.headers).get("authorization"),
+        });
+        if (new URL(url).pathname === "/api/v1/auth/refresh") {
+          return jsonResponse({
+            access_token: ACCESS_TOKEN,
+            refresh_token: ROTATED_REFRESH_TOKEN,
+            access_expires_at: "2030-07-28T14:00:00Z",
+            device_id: DEVICE_ID,
+          });
+        }
+        return jsonResponse(signingKeysResponse);
+      },
+    });
+
+    await client.initialize();
+    await expect(client.taskSigningKeys()).resolves.toEqual(signingKeysResponse);
+
+    const request = requests.at(-1)!;
+    expect(new URL(request.url).pathname).toBe("/api/v1/auth/task-signing-keys");
+    expect(new URL(request.url).search).toBe("");
+    expect(request.authorization).toBe(`Bearer ${ACCESS_TOKEN}`);
   });
 });

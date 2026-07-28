@@ -5,6 +5,7 @@ import type {
   LoginCommand,
   PublicResult,
   RegistrationCommand,
+  SignalViewState,
 } from "../shared/ipc";
 
 const CLIENT_IPC = Object.freeze({
@@ -19,6 +20,7 @@ type RuntimeState = {
   autoBet: "OFF" | "ON";
   executionBlock: "STARTUP_SYNC_REQUIRED" | null;
   highestTask: null;
+  signal: SignalViewState;
 };
 
 type PlatformPageProbe = {

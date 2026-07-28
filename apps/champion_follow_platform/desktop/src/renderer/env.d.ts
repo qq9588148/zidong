@@ -10,6 +10,37 @@ type ChampionRuntimeState = {
     deviceLabel: string | null;
     errorCode: string | null;
   };
+  signal: ChampionSignalState;
+};
+
+type ChampionSignalTask =
+  | {
+      action: "BET";
+      periodId: string;
+      revision: number;
+      ball: 1 | 2 | 3 | 4 | 5;
+      direction: "BIG" | "SMALL" | "ODD" | "EVEN" | "PRIME" | "COMPOSITE";
+      signalVersion: number;
+      userLevel: "CANDIDATE" | "FORMAL" | "CORE";
+    }
+  | {
+      action: "CANCEL";
+      periodId: string;
+      revision: number;
+      reason: string;
+    };
+
+type ChampionSignalState = {
+  status:
+    | "WAITING_FOR_AUTH"
+    | "AUTH_REQUIRED"
+    | "WAITING_FOR_PLATFORM"
+    | "CONNECTING"
+    | "SYNCED"
+    | "OFFLINE";
+  periodId: string | null;
+  task: ChampionSignalTask | null;
+  errorCode: string | null;
 };
 
 type ChampionPlatformPageProbe = {

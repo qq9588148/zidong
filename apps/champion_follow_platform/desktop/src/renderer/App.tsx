@@ -12,6 +12,34 @@ type RuntimeState = {
     deviceLabel: string | null;
     errorCode: string | null;
   };
+  signal: {
+    status:
+      | "WAITING_FOR_AUTH"
+      | "AUTH_REQUIRED"
+      | "WAITING_FOR_PLATFORM"
+      | "CONNECTING"
+      | "SYNCED"
+      | "OFFLINE";
+    periodId: string | null;
+    task:
+      | {
+          action: "BET";
+          periodId: string;
+          revision: number;
+          ball: 1 | 2 | 3 | 4 | 5;
+          direction: "BIG" | "SMALL" | "ODD" | "EVEN" | "PRIME" | "COMPOSITE";
+          signalVersion: number;
+          userLevel: "CANDIDATE" | "FORMAL" | "CORE";
+        }
+      | {
+          action: "CANCEL";
+          periodId: string;
+          revision: number;
+          reason: string;
+        }
+      | null;
+    errorCode: string | null;
+  };
 };
 
 type PlatformPageProbe = Awaited<
@@ -37,6 +65,12 @@ const safeState: RuntimeState = {
     registered: false,
     username: null,
     deviceLabel: null,
+    errorCode: null,
+  },
+  signal: {
+    status: "WAITING_FOR_AUTH",
+    periodId: null,
+    task: null,
     errorCode: null,
   },
 };
@@ -195,6 +229,7 @@ export function App() {
     platformProbe?.countdownMs === undefined
     ? "未识别"
     : formatCountdown(platformProbe.countdownMs);
+  const signalCopy = describeSignal(state.signal);
 
   return (
     <main className="app-shell">
@@ -360,12 +395,12 @@ export function App() {
 
       <section className="control-card">
         <div>
-          <p className="section-label">执行控制</p>
-          <h3>等待服务器与冠军信号</h3>
-          <p>服务器注册或平台登录都不会自动开启执行；完整同步前开关保持锁定。</p>
+          <p className="section-label">服务器信号 · 只读</p>
+          <h3>{signalCopy.title}</h3>
+          <p>{signalCopy.detail}</p>
         </div>
         <button type="button" disabled aria-disabled="true">
-          自动执行已关闭
+          仅展示 · 自动执行已关闭
         </button>
       </section>
 
@@ -408,4 +443,74 @@ function formatCountdown(milliseconds: number): string {
   return hours > 0
     ? [hours, minutes, remainder].map((value) => String(value).padStart(2, "0")).join(":")
     : [minutes, remainder].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
+const directionLabels = {
+  BIG: "大",
+  SMALL: "小",
+  ODD: "单",
+  EVEN: "双",
+  PRIME: "质",
+  COMPOSITE: "合",
+} as const;
+
+function describeSignal(signal: RuntimeState["signal"]): {
+  title: string;
+  detail: string;
+} {
+  if (signal.status === "WAITING_FOR_AUTH" || signal.status === "AUTH_REQUIRED") {
+    return {
+      title: "等待服务器认证",
+      detail: "客户端通过服务器认证后才会接收签名信号。",
+    };
+  }
+  if (signal.status === "WAITING_FOR_PLATFORM") {
+    return {
+      title: "等待进入比特分分彩",
+      detail: "识别到当前期号后才会同步该期服务器信号。",
+    };
+  }
+  if (signal.status === "CONNECTING") {
+    return {
+      title: "正在同步服务器信号",
+      detail: `当前期号 ${signal.periodId ?? "未识别"}，等待权威任务版本。`,
+    };
+  }
+  if (signal.status === "OFFLINE") {
+    return {
+      title: "信号通道暂时不可用",
+      detail: "客户端会自动重连；离线期间不会生成或执行本地方向。",
+    };
+  }
+  if (signal.task === null) {
+    return {
+      title: "当前期暂无合格信号",
+      detail: `期号 ${signal.periodId ?? "未识别"} 已与服务器同步。`,
+    };
+  }
+  if (signal.task.action === "CANCEL") {
+    return {
+      title: "本期信号已取消",
+      detail: `期号 ${signal.task.periodId} · 版本 ${signal.task.revision} · ${cancelReasonLabel(signal.task.reason)}`,
+    };
+  }
+  return {
+    title: `第 ${signal.task.ball} 球 · ${directionLabels[signal.task.direction]}`,
+    detail: `期号 ${signal.task.periodId} · 任务版本 ${signal.task.revision} · 信号版本 ${signal.task.signalVersion} · 仅展示`,
+  };
+}
+
+function cancelReasonLabel(reason: string): string {
+  const labels: Record<string, string> = {
+    champion_withdrew: "冠军已撤回",
+    profile_downgraded: "画像已降级",
+    threshold_changed: "门槛已变化",
+    collector_stale: "采集心跳过期",
+    data_gap: "数据存在缺口",
+    device_reassigned: "设备已重新分配",
+    account_disabled: "账号已停用",
+    device_unbound: "设备已解绑",
+    global_stop: "服务器全局停止",
+  };
+  return labels[reason] ?? "服务器已取消";
 }

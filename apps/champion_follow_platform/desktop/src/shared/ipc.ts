@@ -13,8 +13,48 @@ export type ConnectionViewState = {
   errorCode: string | null;
 };
 
+export type SignalTaskView =
+  | {
+      action: "BET";
+      periodId: string;
+      revision: number;
+      ball: 1 | 2 | 3 | 4 | 5;
+      direction: "BIG" | "SMALL" | "ODD" | "EVEN" | "PRIME" | "COMPOSITE";
+      signalVersion: number;
+      userLevel: "CANDIDATE" | "FORMAL" | "CORE";
+    }
+  | {
+      action: "CANCEL";
+      periodId: string;
+      revision: number;
+      reason:
+        | "champion_withdrew"
+        | "profile_downgraded"
+        | "threshold_changed"
+        | "collector_stale"
+        | "data_gap"
+        | "device_reassigned"
+        | "account_disabled"
+        | "device_unbound"
+        | "global_stop";
+    };
+
+export type SignalViewState = {
+  status:
+    | "WAITING_FOR_AUTH"
+    | "AUTH_REQUIRED"
+    | "WAITING_FOR_PLATFORM"
+    | "CONNECTING"
+    | "SYNCED"
+    | "OFFLINE";
+  periodId: string | null;
+  task: SignalTaskView | null;
+  errorCode: string | null;
+};
+
 export type ClientViewState = RuntimeState & {
   connection: ConnectionViewState;
+  signal: SignalViewState;
 };
 
 export type RegistrationCommand = {

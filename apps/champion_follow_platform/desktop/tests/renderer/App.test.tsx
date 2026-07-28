@@ -11,6 +11,12 @@ const baseState = {
   autoBet: "OFF" as const,
   executionBlock: "STARTUP_SYNC_REQUIRED" as const,
   highestTask: null,
+  signal: {
+    status: "WAITING_FOR_PLATFORM" as const,
+    periodId: null,
+    task: null,
+    errorCode: null,
+  },
 };
 
 const emptyPlatformState = {
@@ -57,7 +63,9 @@ describe("App registration state", () => {
 
     expect(await screen.findByRole("button", { name: "注册并绑定本机" })).toBeVisible();
     expect(screen.getByLabelText("一次性授权码")).toBeVisible();
-    expect(screen.getByRole("button", { name: "自动执行已关闭" })).toBeDisabled();
+    expect(screen.getByRole("button", {
+      name: "仅展示 · 自动执行已关闭",
+    })).toBeDisabled();
   });
 
   it("shows the authenticated device without a registration form", async () => {
@@ -238,5 +246,50 @@ describe("App registration state", () => {
     expect(screen.getByText(/赔率：固定 1\.96/)).toBeVisible();
     expect(screen.getByText(/公开下注：2 条/)).toBeVisible();
     expect(screen.getByText(/不会下注/)).toBeVisible();
+  });
+
+  it("shows a sanitized server signal without enabling execution", async () => {
+    window.championFollow = {
+      getState: vi.fn(async () => ({
+        ...baseState,
+        connection: {
+          status: "ONLINE" as const,
+          registered: true,
+          username: "client-user",
+          deviceLabel: "90abcdef",
+          errorCode: null,
+        },
+        signal: {
+          status: "SYNCED" as const,
+          periodId: "2607290010",
+          task: {
+            action: "BET" as const,
+            periodId: "2607290010",
+            revision: 4,
+            ball: 2 as const,
+            direction: "ODD" as const,
+            signalVersion: 7,
+            userLevel: "CORE" as const,
+          },
+          errorCode: null,
+        },
+      })),
+      register: vi.fn(),
+      login: vi.fn(),
+      setAutoBet: vi.fn(),
+      getPlatformWindowState: vi.fn(async () => emptyPlatformState),
+      openPlatformLogin: vi.fn(),
+      quitApp: vi.fn(),
+    };
+
+    render(<App />);
+
+    expect(await screen.findByText("第 2 球 · 单")).toBeVisible();
+    expect(screen.getByText(/任务版本 4/)).toBeVisible();
+    expect(screen.getByText(/信号版本 7/)).toBeVisible();
+    expect(screen.getByRole("button", {
+      name: "仅展示 · 自动执行已关闭",
+    })).toBeDisabled();
+    expect(document.body.textContent).not.toMatch(/actor_ref|signature|device_id/);
   });
 });

@@ -1,6 +1,9 @@
 import WebSocket, { type RawData } from "ws";
 
-import { HighestRevisionTasks } from "./task-contract";
+import {
+  HighestRevisionTasks,
+  type DeviceTaskEnvelope,
+} from "./task-contract";
 
 export interface TaskWebSocket {
   on(event: "open", listener: () => void): this;
@@ -11,17 +14,21 @@ export interface TaskWebSocket {
   close(code?: number): void;
 }
 
-type TaskSocketOptions = {
+export type TaskSocketOptions = {
   url: string;
   accessToken: () => Promise<string>;
   periodId: () => string;
   reducer: HighestRevisionTasks;
+  onSynchronized?: (task: DeviceTaskEnvelope | null) => void;
+  onTask?: (task: DeviceTaskEnvelope) => void;
+  onDisconnected?: () => void;
   websocketFactory?: (url: string, authorization: string) => TaskWebSocket;
 };
 
 export class TaskSocket {
   private socket: TaskWebSocket | null = null;
   private synchronized = false;
+  private requestedPeriodId: string | null = null;
 
   constructor(private readonly options: TaskSocketOptions) {}
 
@@ -43,6 +50,11 @@ export class TaskSocket {
 
     socket.on("open", () => {
       const periodId = this.options.periodId();
+      if (!/^[A-Za-z0-9._-]{1,64}$/.test(periodId)) {
+        socket.close(1008);
+        return;
+      }
+      this.requestedPeriodId = periodId;
       socket.send(JSON.stringify({
         type: "SYNC",
         period_id: periodId,
@@ -52,10 +64,13 @@ export class TaskSocket {
     socket.on("message", (data) => this.onMessage(data));
     socket.on("error", () => {
       this.synchronized = false;
+      this.options.onDisconnected?.();
     });
     socket.on("close", () => {
       this.synchronized = false;
+      this.requestedPeriodId = null;
       this.socket = null;
+      this.options.onDisconnected?.();
     });
   }
 
@@ -63,6 +78,7 @@ export class TaskSocket {
     this.socket?.close(1000);
     this.socket = null;
     this.synchronized = false;
+    this.requestedPeriodId = null;
   }
 
   private onMessage(data: RawData | Buffer): void {
@@ -85,12 +101,27 @@ export class TaskSocket {
 
     if (!this.synchronized) {
       if (message.type === "TASK" && "task" in message) {
-        this.options.reducer.accept(message.task);
+        const acceptance = this.options.reducer.accept(message.task);
+        const task = parseTaskForPeriod(
+          message.task,
+          this.requestedPeriodId,
+          this.options.reducer,
+        );
+        if ((acceptance !== "accepted" && acceptance !== "duplicate") ||
+            task === null) {
+          this.socket?.close(1008);
+          return;
+        }
         this.synchronized = true;
+        this.options.onSynchronized?.(task);
         return;
       }
-      if (message.type === "UP_TO_DATE" || message.type === "NO_TASK") {
+      if (isAuthoritativeSyncFrame(message, this.requestedPeriodId)) {
         this.synchronized = true;
+        const task = message.type === "NO_TASK" || this.requestedPeriodId === null
+          ? null
+          : this.options.reducer.current(this.requestedPeriodId);
+        this.options.onSynchronized?.(task);
         return;
       }
       this.socket?.close(1008);
@@ -98,11 +129,67 @@ export class TaskSocket {
     }
 
     if (message.type === "TASK" && "task" in message) {
-      this.options.reducer.accept(message.task);
+      const acceptance = this.options.reducer.accept(message.task);
+      if (acceptance !== "accepted" && acceptance !== "duplicate") {
+        this.socket?.close(1008);
+        return;
+      }
+      const task = parseAcceptedTask(message.task, this.options.reducer);
+      if (task === null) {
+        this.socket?.close(1008);
+        return;
+      }
+      this.options.onTask?.(task);
+      return;
+    }
+    if (isHeartbeatFrame(message)) {
       return;
     }
     this.socket?.close(1008);
   }
+}
+
+function parseTaskForPeriod(
+  value: unknown,
+  periodId: string | null,
+  reducer: HighestRevisionTasks,
+): DeviceTaskEnvelope | null {
+  const task = parseAcceptedTask(value, reducer);
+  return task !== null && periodId !== null && task.period_id === periodId
+    ? task
+    : null;
+}
+
+function parseAcceptedTask(
+  value: unknown,
+  reducer: HighestRevisionTasks,
+): DeviceTaskEnvelope | null {
+  if (!isObject(value) || typeof value.period_id !== "string") return null;
+  return reducer.current(value.period_id);
+}
+
+function isAuthoritativeSyncFrame(
+  value: Record<string, unknown>,
+  periodId: string | null,
+): value is Record<string, unknown> & {
+  type: "UP_TO_DATE" | "NO_TASK";
+  period_id: string;
+  highest_revision: number;
+} {
+  if ((value.type !== "UP_TO_DATE" && value.type !== "NO_TASK") ||
+      Object.keys(value).sort().join(",") !==
+        "highest_revision,period_id,type" ||
+      value.period_id !== periodId ||
+      !Number.isSafeInteger(value.highest_revision) ||
+      (value.highest_revision as number) < 0) return false;
+  return value.type !== "NO_TASK" || value.highest_revision === 0;
+}
+
+function isHeartbeatFrame(value: Record<string, unknown>): boolean {
+  return value.type === "HEARTBEAT" &&
+    Object.keys(value).sort().join(",") === "server_time,type" &&
+    typeof value.server_time === "string" &&
+    Number.isFinite(Date.parse(value.server_time));
 }
 
 function rawDataText(data: RawData | Buffer): string | null {
