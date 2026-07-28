@@ -45,6 +45,18 @@ h2 { margin: 10px 0 8px; font-size: 34px; }
 .account-action:disabled { cursor: wait; opacity: .65; }
 .account-message { align-self: center; margin: 0; color: #8fabca; font-size: 12px; line-height: 1.5; }
 
+.result-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: #020914c7; backdrop-filter: blur(5px); }
+.result-dialog { width: min(440px, 100%); padding: 30px; border: 1px solid #315f82; border-radius: 22px; background: linear-gradient(150deg, #132c43, #091725); box-shadow: 0 28px 90px #000b; text-align: center; }
+.result-dialog.success { border-color: #2f806a; }
+.result-dialog.error { border-color: #a85b63; }
+.result-icon { display: grid; place-items: center; width: 62px; height: 62px; margin: 0 auto 17px; border-radius: 20px; font-size: 30px; font-weight: 850; }
+.result-dialog.success .result-icon { color: #8be9c2; background: #123e37; border: 1px solid #2f806a; }
+.result-dialog.error .result-icon { color: #ffb1b8; background: #481f2a; border: 1px solid #a85b63; }
+.result-dialog h3 { margin: 0; font-size: 25px; }
+.result-dialog p { margin: 13px 0 24px; color: #abc0d3; line-height: 1.65; }
+.result-dialog button { min-width: 136px; min-height: 44px; border: 1px solid #4a91ca; border-radius: 11px; color: #f2f8ff; background: linear-gradient(135deg, #1979ca, #13528b); font-weight: 750; cursor: pointer; }
+.result-dialog button:focus-visible { outline: 3px solid #7fc2ff; outline-offset: 3px; }
+
 .control-card, .platform-card { margin-top: 20px; padding: 26px 30px; border-radius: 18px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .control-card h3, .platform-card h3 { margin: 5px 0 7px; font-size: 20px; }
 .control-card p:last-child, .platform-card p:last-child { margin: 0; color: #839db6; }

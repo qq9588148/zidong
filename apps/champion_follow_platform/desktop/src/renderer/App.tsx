@@ -18,6 +18,12 @@ type PlatformPageProbe = Awaited<
   ReturnType<typeof window.championFollow.getPlatformWindowState>
 >["probe"];
 
+type AuthFeedback = {
+  kind: "success" | "error";
+  title: string;
+  message: string;
+};
+
 const safeState: RuntimeState = {
   generation: "starting",
   autoBet: "OFF",
@@ -51,6 +57,7 @@ export function App() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
+  const [authFeedback, setAuthFeedback] = useState<AuthFeedback | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -88,7 +95,9 @@ export function App() {
   const submitRegistration = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (password !== confirmPassword) {
-      setAuthMessage("两次输入的密码不一致。");
+      const message = "两次输入的密码不一致。";
+      setAuthMessage(message);
+      setAuthFeedback({ kind: "error", title: "注册失败", message });
       return;
     }
     setAuthBusy(true);
@@ -103,11 +112,19 @@ export function App() {
       setConfirmPassword("");
       if (result.ok) {
         setAuthorizationCode("");
-        setAuthMessage("注册和本机绑定已完成。");
+        const message = "账号注册和本机绑定已完成，客户端已经通过服务器认证。";
+        setAuthMessage(message);
+        setAuthFeedback({ kind: "success", title: "注册成功", message });
       } else {
-        setAuthMessage(errorLabels[result.code] ?? "注册失败，请稍后重试。");
+        const message = errorLabels[result.code] ?? "注册失败，请稍后重试。";
+        setAuthMessage(message);
+        setAuthFeedback({ kind: "error", title: "注册失败", message });
       }
       await refreshState();
+    } catch {
+      const message = "注册请求未完成，请检查网络连接后重试。";
+      setAuthMessage(message);
+      setAuthFeedback({ kind: "error", title: "注册失败", message });
     } finally {
       setAuthBusy(false);
     }
@@ -120,10 +137,20 @@ export function App() {
     try {
       const result = await window.championFollow.login({ username, password });
       setPassword("");
-      setAuthMessage(result.ok
+      const message = result.ok
         ? "服务器登录成功。"
-        : (errorLabels[result.code] ?? "登录失败，请稍后重试。"));
+        : (errorLabels[result.code] ?? "登录失败，请稍后重试。");
+      setAuthMessage(message);
+      setAuthFeedback({
+        kind: result.ok ? "success" : "error",
+        title: result.ok ? "登录成功" : "登录失败",
+        message,
+      });
       await refreshState();
+    } catch {
+      const message = "登录请求未完成，请检查网络连接后重试。";
+      setAuthMessage(message);
+      setAuthFeedback({ kind: "error", title: "登录失败", message });
     } finally {
       setAuthBusy(false);
     }
@@ -318,6 +345,25 @@ export function App() {
           完全退出
         </button>
       </footer>
+
+      {authFeedback && (
+        <div className="result-backdrop">
+          <section
+            className={`result-dialog ${authFeedback.kind}`}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="auth-result-title"
+            aria-describedby="auth-result-message"
+          >
+            <div className="result-icon" aria-hidden="true">
+              {authFeedback.kind === "success" ? "✓" : "!"}
+            </div>
+            <h3 id="auth-result-title">{authFeedback.title}</h3>
+            <p id="auth-result-message">{authFeedback.message}</p>
+            <button type="button" onClick={() => setAuthFeedback(null)}>知道了</button>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
