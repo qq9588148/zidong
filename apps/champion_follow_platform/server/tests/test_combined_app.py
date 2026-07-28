@@ -70,3 +70,4 @@ async def test_combined_app_owns_one_core_pool_and_one_auth_session_factory(
         assert app.state.ingestion.repository.pool is core_pool
         assert app.state.rankings.pool is core_pool
         assert app.state.threshold_previews.repository.pool is core_pool
+        assert app.state.processing_coordinator.pool is core_pool

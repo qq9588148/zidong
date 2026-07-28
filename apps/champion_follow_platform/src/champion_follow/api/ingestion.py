@@ -142,6 +142,12 @@ async def collector_events(
     except (SequenceGap, EventConflict, CollectorContractError) as error:
         _raise_public_ingestion_error(error)
         raise AssertionError("unreachable")
+    coordinator = getattr(request.app.state, "processing_coordinator", None)
+    if coordinator is not None:
+        await coordinator.process(
+            namespace_id=identity.namespace_id,
+            namespace_version=identity.namespace_version,
+        )
     return CollectorWireAck(ack_seq=ack.highest_contiguous_sequence)
 
 
@@ -159,4 +165,10 @@ async def collector_heartbeat(
         last_journal_sequence=body.last_journal_seq,
         capture_healthy=body.capture_healthy,
     )
+    coordinator = getattr(request.app.state, "processing_coordinator", None)
+    if coordinator is not None:
+        await coordinator.process(
+            namespace_id=identity.namespace_id,
+            namespace_version=identity.namespace_version,
+        )
     return Response(status_code=204)

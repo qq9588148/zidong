@@ -35,6 +35,8 @@ class GapDetected:
 class CollectorIdentity:
     collector_id: UUID
     wire_id: str
+    namespace_id: UUID
+    namespace_version: str
 
 
 @dataclass(frozen=True)
@@ -53,13 +55,21 @@ class IngestionRepository:
         async with self.pool.connection() as connection:
             row = await (
                 await connection.execute(
-                    "SELECT id,wire_id FROM collectors WHERE bearer_sha256=%s",
+                    "SELECT c.id,c.wire_id,c.namespace_id,n.version AS namespace_version "
+                    "FROM collectors AS c JOIN identity_namespaces AS n "
+                    "ON n.id=c.namespace_id AND n.mode='active' "
+                    "WHERE c.bearer_sha256=%s",
                     (bearer_sha256,),
                 )
             ).fetchone()
         if row is None:
             return None
-        return CollectorIdentity(collector_id=row["id"], wire_id=row["wire_id"])
+        return CollectorIdentity(
+            collector_id=row["id"],
+            wire_id=row["wire_id"],
+            namespace_id=row["namespace_id"],
+            namespace_version=row["namespace_version"],
+        )
 
     async def collector_session(
         self, collector_id: UUID, namespace_version: str

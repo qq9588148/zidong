@@ -4,6 +4,7 @@ from pathlib import Path
 
 from champion_follow.db import open_pool
 from champion_follow.main import configure_core_services, register_core_routers
+from champion_follow.services.processing import ProcessingCoordinator
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, RedirectResponse
 
@@ -139,6 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with open_pool(_core_database_url(resolved.database_url)) as core_pool:
             async with open_auth_engine(resolved.database_url) as auth:
                 configure_core_services(app, core_pool)
+                app.state.processing_coordinator = ProcessingCoordinator(core_pool)
                 app.state.threshold_service = ThresholdService(
                     app.state.threshold_previews,
                     app.state.audit_writer,
