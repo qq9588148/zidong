@@ -23,6 +23,12 @@ const output = join(
 );
 
 execFileSync("dotnet", [
+  "restore",
+  project,
+  "--runtime", "win-x64",
+], { stdio: "inherit", windowsHide: true });
+
+execFileSync("dotnet", [
   "publish",
   project,
   "--configuration", "Release",

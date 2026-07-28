@@ -24,6 +24,10 @@ import {
   platformPageProbeScript,
   type PlatformPageProbe,
 } from "./platform-page-probe";
+import {
+  clickBtcFfcEntry,
+  primeBtcFfcBetPanel,
+} from "./platform-game-entry";
 
 export const platformEndpointRegistry = new PlatformEndpointRegistry();
 
@@ -34,6 +38,7 @@ let platformProbeTimer: ReturnType<typeof setInterval> | null = null;
 let platformProbeInFlight = false;
 let platformSessionTimer: ReturnType<typeof setInterval> | null = null;
 let platformSessionInFlight = false;
+let platformGameEntryTimer: ReturnType<typeof setInterval> | null = null;
 
 export type PlatformSessionPersistenceState = Readonly<{
   encryptionAvailable: boolean | null;
@@ -117,6 +122,7 @@ export function openNgPlatformWindow(): BrowserWindow {
   window.on("closed", () => {
     stopPlatformPageProbe();
     stopPlatformSessionCapture();
+    stopPlatformGameEntry();
     latestPlatformProbe = null;
     if (platformWindow === window) platformWindow = null;
   });
@@ -142,6 +148,7 @@ export function openNgPlatformWindow(): BrowserWindow {
             protectedSession,
             endpoint.allowedOrigins,
           );
+          startPlatformGameEntry(window);
         }
       }
     })
@@ -149,6 +156,31 @@ export function openNgPlatformWindow(): BrowserWindow {
       if (!window.isDestroyed()) window.destroy();
     });
   return window;
+}
+
+function startPlatformGameEntry(window: BrowserWindow): void {
+  stopPlatformGameEntry();
+  const entryScript = `(${clickBtcFfcEntry.toString()})(document)`;
+  const primeScript = `(${primeBtcFfcBetPanel.toString()})(document)`;
+  const run = async () => {
+    if (window.isDestroyed() || window.webContents.isLoadingMainFrame()) return;
+    await window.webContents.executeJavaScript(entryScript).catch(() => undefined);
+    const frames = [
+      window.webContents.mainFrame,
+      ...window.webContents.mainFrame.frames,
+    ];
+    for (const frame of frames) {
+      if (frame.isDestroyed()) continue;
+      await frame.executeJavaScript(primeScript).catch(() => undefined);
+    }
+  };
+  void run();
+  platformGameEntryTimer = setInterval(() => void run(), 2_000);
+}
+
+function stopPlatformGameEntry(): void {
+  if (platformGameEntryTimer !== null) clearInterval(platformGameEntryTimer);
+  platformGameEntryTimer = null;
 }
 
 function installPlatformSessionRestore(
