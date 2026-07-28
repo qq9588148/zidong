@@ -17,7 +17,7 @@ h1 { margin: 0; font-size: 22px; }
 .mode-pill { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid #2e6394; border-radius: 999px; color: #b8d9fa; background: #0b2036cc; font-size: 13px; }
 .mode-pill span { width: 8px; height: 8px; border-radius: 50%; background: #5eafef; box-shadow: 0 0 0 5px #2d83c733; }
 
-.hero-card, .control-card, .platform-card, .status-card { border: 1px solid #214565; background: linear-gradient(145deg, #10273ddd, #0a192bdd); box-shadow: 0 18px 50px #02081344; }
+.hero-card, .control-card, .platform-card, .account-card, .status-card { border: 1px solid #214565; background: linear-gradient(145deg, #10273ddd, #0a192bdd); box-shadow: 0 18px 50px #02081344; }
 .hero-card { margin-top: 42px; padding: 38px 40px; border-radius: 24px; display: flex; align-items: center; justify-content: space-between; }
 h2 { margin: 10px 0 8px; font-size: 34px; }
 .hero-copy { margin: 0; max-width: 620px; color: #a9bfd5; line-height: 1.7; }
@@ -32,6 +32,18 @@ h2 { margin: 10px 0 8px; font-size: 34px; }
 .status-card span { color: #718da7; font-size: 12px; }
 .status-card.safety { border-color: #236653; }
 .status-card.safety strong { color: #77e3b5; }
+
+.account-card { margin-top: 20px; padding: 28px 30px; border-radius: 18px; display: grid; grid-template-columns: minmax(240px, .8fr) minmax(360px, 1.2fr); gap: 34px; align-items: start; border-color: #285b86; }
+.account-copy h3 { margin: 6px 0 10px; font-size: 22px; }
+.account-copy p:last-child { margin: 0; color: #839db6; line-height: 1.7; }
+.account-form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.account-form label { display: grid; gap: 7px; color: #9db5cc; font-size: 12px; font-weight: 650; }
+.account-form input { width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid #315a7d; border-radius: 10px; color: #eef7ff; background: #071725; outline: none; }
+.account-form input:focus { border-color: #5daaf0; box-shadow: 0 0 0 3px #2b86d72c; }
+.account-action { min-height: 46px; border: 1px solid #3b8ed2; border-radius: 11px; color: #f2f8ff; background: linear-gradient(135deg, #1979ca, #13528b); font-weight: 750; cursor: pointer; }
+.account-action:hover:not(:disabled) { filter: brightness(1.1); }
+.account-action:disabled { cursor: wait; opacity: .65; }
+.account-message { align-self: center; margin: 0; color: #8fabca; font-size: 12px; line-height: 1.5; }
 
 .control-card, .platform-card { margin-top: 20px; padding: 26px 30px; border-radius: 18px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .control-card h3, .platform-card h3 { margin: 5px 0 7px; font-size: 20px; }
@@ -55,5 +67,10 @@ footer code { color: #8da9c4; }
   .status-grid { grid-template-columns: 1fr; }
   .hero-card { padding: 28px; }
   .shield { display: none; }
+  .account-card { grid-template-columns: 1fr; }
   .control-card, .platform-card { align-items: stretch; flex-direction: column; gap: 20px; }
+}
+
+@media (max-width: 560px) {
+  .account-form { grid-template-columns: 1fr; }
 }

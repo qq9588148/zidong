@@ -1,10 +1,17 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 type RuntimeState = {
   generation: string;
   autoBet: "OFF" | "ON";
   executionBlock: "STARTUP_SYNC_REQUIRED" | null;
   highestTask: null;
+  connection: {
+    status: "UNREGISTERED" | "CONNECTING" | "ONLINE" | "AUTH_REQUIRED" | "OFFLINE";
+    registered: boolean;
+    username: string | null;
+    deviceLabel: string | null;
+    errorCode: string | null;
+  };
 };
 
 type PlatformPageProbe = Awaited<
@@ -16,6 +23,21 @@ const safeState: RuntimeState = {
   autoBet: "OFF",
   executionBlock: "STARTUP_SYNC_REQUIRED",
   highestTask: null,
+  connection: {
+    status: "UNREGISTERED",
+    registered: false,
+    username: null,
+    deviceLabel: null,
+    errorCode: null,
+  },
+};
+
+const errorLabels: Record<string, string> = {
+  INVALID_INPUT: "请检查授权码、账号和密码格式。",
+  SERVER_UNAVAILABLE: "暂时无法连接服务器，请稍后重试。",
+  REGISTRATION_REJECTED: "授权码无效、已使用或注册信息不可用。",
+  LOGIN_REJECTED: "账号、密码或本机设备身份验证失败。",
+  LOCAL_IDENTITY_UNAVAILABLE: "本机安全身份不可用，请联系管理员重新绑定。",
 };
 
 export function App() {
@@ -23,12 +45,24 @@ export function App() {
   const [platformOpen, setPlatformOpen] = useState(false);
   const [platformProbe, setPlatformProbe] = useState<PlatformPageProbe>(null);
   const [openingPlatform, setOpeningPlatform] = useState(false);
+  const [authorizationCode, setAuthorizationCode] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
 
   useEffect(() => {
     let active = true;
-    void window.championFollow.getState().then((value) => {
-      if (active) setState(value);
-    });
+    const refreshClient = () => {
+      void window.championFollow.getState().then((value) => {
+        if (active) {
+          setState(value);
+          setUsername((current) => current || value.connection.username || "");
+        }
+      });
+    };
+    refreshClient();
     const refreshPlatform = () => {
       void window.championFollow.getPlatformWindowState().then((value) => {
         if (active) {
@@ -38,12 +72,62 @@ export function App() {
       });
     };
     refreshPlatform();
-    const timer = window.setInterval(refreshPlatform, 1_000);
+    const platformTimer = window.setInterval(refreshPlatform, 1_000);
+    const clientTimer = window.setInterval(refreshClient, 2_000);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      window.clearInterval(platformTimer);
+      window.clearInterval(clientTimer);
     };
   }, []);
+
+  const refreshState = async () => {
+    setState(await window.championFollow.getState());
+  };
+
+  const submitRegistration = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (password !== confirmPassword) {
+      setAuthMessage("两次输入的密码不一致。");
+      return;
+    }
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      const result = await window.championFollow.register({
+        authorizationCode,
+        username,
+        password,
+      });
+      setPassword("");
+      setConfirmPassword("");
+      if (result.ok) {
+        setAuthorizationCode("");
+        setAuthMessage("注册和本机绑定已完成。");
+      } else {
+        setAuthMessage(errorLabels[result.code] ?? "注册失败，请稍后重试。");
+      }
+      await refreshState();
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      const result = await window.championFollow.login({ username, password });
+      setPassword("");
+      setAuthMessage(result.ok
+        ? "服务器登录成功。"
+        : (errorLabels[result.code] ?? "登录失败，请稍后重试。"));
+      await refreshState();
+    } finally {
+      setAuthBusy(false);
+    }
+  };
 
   const openPlatformLogin = async () => {
     setOpeningPlatform(true);
@@ -77,15 +161,17 @@ export function App() {
           <p className="eyebrow">CHAMPION FOLLOW</p>
           <h1>冠军跟随客户端</h1>
         </div>
-        <div className="mode-pill"><span />本地测试模式</div>
+        <div className="mode-pill"><span />服务器接入测试</div>
       </header>
 
       <section className="hero-card">
         <div>
           <p className="section-label">启动状态</p>
-          <h2>客户端已安全启动</h2>
+          <h2>{state.connection.status === "ONLINE" ? "客户端已连接服务器" : "客户端已安全启动"}</h2>
           <p className="hero-copy">
-            自动执行核心已就绪。服务器仍未接入；NG 平台只在你点击后打开，登录由你本人完成。
+            {state.connection.status === "ONLINE"
+              ? "账号与本机设备已经绑定，重启后会通过 Windows 凭据库自动恢复会话。"
+              : "先完成客户端账号注册和本机绑定。NG 平台登录仍由你本人完成，自动执行保持关闭。"}
           </p>
         </div>
         <div className="shield" aria-label="安全锁定">✓</div>
@@ -93,8 +179,16 @@ export function App() {
 
       <section className="status-grid" aria-label="客户端状态">
         <article className="status-card">
-          <p>服务器</p><strong className="muted">未连接</strong>
-          <span>按测试计划最后接入</span>
+          <p>服务器</p>
+          <strong className={state.connection.status === "ONLINE" ? "active" : "muted"}>
+            {state.connection.status === "ONLINE" ? "已认证" :
+              state.connection.status === "CONNECTING" ? "连接中" :
+              state.connection.status === "AUTH_REQUIRED" ? "需要登录" :
+              state.connection.status === "OFFLINE" ? "暂时离线" : "未注册"}
+          </strong>
+          <span>{state.connection.deviceLabel
+            ? `设备 …${state.connection.deviceLabel}`
+            : "等待一次性授权码"}</span>
         </article>
         <article className="status-card">
           <p>平台页面</p>
@@ -108,6 +202,81 @@ export function App() {
           <span>每次启动固定恢复为关闭</span>
         </article>
       </section>
+
+      {state.connection.status !== "ONLINE" && (
+        <section className="account-card">
+          <div className="account-copy">
+            <p className="section-label">客户端账号</p>
+            <h3>{state.connection.registered ? "重新登录服务器" : "注册并绑定这台电脑"}</h3>
+            <p>{state.connection.registered
+              ? "设备身份仍保存在本机，只需输入客户端账号和密码恢复会话。"
+              : "使用后台生成的一次性授权码。一个客户端账号只绑定一台电脑。"}</p>
+          </div>
+          <form
+            className="account-form"
+            onSubmit={state.connection.registered ? submitLogin : submitRegistration}
+          >
+            {!state.connection.registered && (
+              <label>
+                一次性授权码
+                <input
+                  value={authorizationCode}
+                  onChange={(event) => setAuthorizationCode(event.target.value)}
+                  autoComplete="off"
+                  required
+                  minLength={40}
+                  maxLength={100}
+                />
+              </label>
+            )}
+            <label>
+              客户端账号
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+                required
+                minLength={3}
+                maxLength={80}
+              />
+            </label>
+            <label>
+              密码
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={state.connection.registered ? "current-password" : "new-password"}
+                required
+                minLength={12}
+                maxLength={128}
+              />
+            </label>
+            {!state.connection.registered && (
+              <label>
+                确认密码
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                  minLength={12}
+                  maxLength={128}
+                />
+              </label>
+            )}
+            <button className="account-action" type="submit" disabled={authBusy}>
+              {authBusy ? "正在处理…" : state.connection.registered ? "登录服务器" : "注册并绑定本机"}
+            </button>
+            <p className="account-message" role="status" aria-live="polite">
+              {authMessage || (state.connection.errorCode
+                ? errorLabels[state.connection.errorCode]
+                : "授权码和密码不会写入日志。")}
+            </p>
+          </form>
+        </section>
+      )}
 
       <section className="platform-card">
         <div>
@@ -134,7 +303,7 @@ export function App() {
         <div>
           <p className="section-label">执行控制</p>
           <h3>等待服务器与冠军信号</h3>
-          <p>平台登录不会自动开启执行；完整同步前开关保持锁定。</p>
+          <p>服务器注册或平台登录都不会自动开启执行；完整同步前开关保持锁定。</p>
         </div>
         <button type="button" disabled aria-disabled="true">
           自动执行已关闭

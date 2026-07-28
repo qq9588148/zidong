@@ -1,8 +1,12 @@
 import { app, BrowserWindow, ipcMain } from "electron";
-import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 
+import { AppController, initialRuntimeState } from "./app-controller";
+import { DeviceAuthClient, JsonDeviceIdentityStore } from "./auth-client";
+import { registerClientIpc } from "./ipc-handlers";
+import { createNativeHelper } from "./native-helper-runtime";
+import { desktopPaths } from "./paths";
 import {
   allowPlatformWindowCloseForExit,
   getLatestPlatformPageProbe,
@@ -10,21 +14,9 @@ import {
   openNgPlatformWindow,
 } from "./platform-window";
 
-export type RuntimeState = {
-  generation: string;
-  autoBet: "OFF" | "ON";
-  executionBlock: "STARTUP_SYNC_REQUIRED" | null;
-  highestTask: null;
-};
+export { initialRuntimeState };
 
-export const initialRuntimeState = (): RuntimeState => ({
-  generation: randomUUID(),
-  autoBet: "OFF",
-  executionBlock: "STARTUP_SYNC_REQUIRED",
-  highestTask: null,
-});
-
-let runtimeState = initialRuntimeState();
+const DEFAULT_SERVER_BASE_URL = "https://101.37.172.66:8443";
 let mainWindow: BrowserWindow | null = null;
 let appIsQuitting = false;
 
@@ -54,8 +46,8 @@ export function createMainWindow(): BrowserWindow {
   return window;
 }
 
-function registerOfflineIpc(): void {
-  ipcMain.handle("champion:get-state", () => runtimeState);
+function registerAppIpc(controller: AppController): void {
+  registerClientIpc(ipcMain, controller);
   ipcMain.handle("champion:get-platform-window-state", () => ({
     open: isPlatformWindowOpen(),
     probe: getLatestPlatformPageProbe(),
@@ -63,14 +55,6 @@ function registerOfflineIpc(): void {
   ipcMain.handle("champion:open-platform-login", () => {
     openNgPlatformWindow();
     return { ok: true, open: true };
-  });
-  ipcMain.handle("champion:set-auto-bet", (_event, enabled: unknown) => {
-    // Offline shell cannot arm execution. It may only reaffirm the safe OFF state.
-    if (enabled !== false) {
-      return runtimeState;
-    }
-    runtimeState = { ...runtimeState, autoBet: "OFF" };
-    return runtimeState;
   });
   ipcMain.handle("champion:quit-app", () => {
     appIsQuitting = true;
@@ -126,8 +110,17 @@ if (process.env.VITEST !== "true" && app) {
     app.on("second-instance", () => openMainWindow());
     app.whenReady().then(() => {
       removeObsoleteProtectedSessionSnapshots();
-      registerOfflineIpc();
+      const authClient = new DeviceAuthClient({
+        baseUrl: DEFAULT_SERVER_BASE_URL,
+        helper: createNativeHelper(),
+        store: new JsonDeviceIdentityStore(
+          join(desktopPaths().profile, "device-identity.json"),
+        ),
+      });
+      const controller = new AppController(authClient);
+      registerAppIpc(controller);
       openMainWindow();
+      void controller.initialize();
       app.on("activate", () => openMainWindow());
     });
   }

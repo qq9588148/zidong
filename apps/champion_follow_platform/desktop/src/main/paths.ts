@@ -37,3 +37,40 @@ export function contractPath(
     ? join(environment.resourcesPath, "contracts", name)
     : resolve(environment.appPath, "../contracts", name);
 }
+
+export type NativeHelperPaths = {
+  executable: string;
+  sha256: string;
+};
+
+export function nativeHelperPaths(options?: {
+  packaged: boolean;
+  appPath: string;
+  resourcesPath: string;
+}): NativeHelperPaths {
+  const environment = options ?? {
+    packaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+  };
+  const directory = environment.packaged
+    ? join(
+        environment.resourcesPath,
+        "native",
+        "ChampionFollow.DeviceIdentity",
+      )
+    : join(
+        environment.appPath,
+        "native",
+        "ChampionFollow.DeviceIdentity",
+        "bin",
+        "Release",
+        "net10.0-windows",
+        "win-x64",
+        "publish",
+      );
+  return {
+    executable: join(directory, "ChampionFollow.DeviceIdentity.exe"),
+    sha256: join(directory, "ChampionFollow.DeviceIdentity.sha256"),
+  };
+}

@@ -8,7 +8,8 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.main.json && vite build",
+    "build:native": "node scripts/build-native-helper.mjs",
+    "build": "npm run build:native && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.main.json && vite build",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "start": "npm run build && electron .",
@@ -49,6 +50,16 @@
       "dist-main/**/*",
       "dist-renderer/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "native/ChampionFollow.DeviceIdentity/bin/Release/net10.0-windows/win-x64/publish/ChampionFollow.DeviceIdentity.exe",
+        "to": "native/ChampionFollow.DeviceIdentity/ChampionFollow.DeviceIdentity.exe"
+      },
+      {
+        "from": "native/ChampionFollow.DeviceIdentity/bin/Release/net10.0-windows/win-x64/publish/ChampionFollow.DeviceIdentity.sha256",
+        "to": "native/ChampionFollow.DeviceIdentity/ChampionFollow.DeviceIdentity.sha256"
+      }
     ],
     "win": {
       "target": [

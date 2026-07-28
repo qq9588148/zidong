@@ -1,5 +1,19 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+import type {
+  ClientViewState,
+  LoginCommand,
+  PublicResult,
+  RegistrationCommand,
+} from "../shared/ipc";
+
+const CLIENT_IPC = Object.freeze({
+  getState: "champion:get-state",
+  register: "champion:register",
+  login: "champion:login",
+  setAutoBet: "champion:set-auto-bet",
+});
+
 type RuntimeState = {
   generation: string;
   autoBet: "OFF" | "ON";
@@ -23,13 +37,17 @@ type PlatformPageProbe = {
 };
 
 const api = Object.freeze({
-  getState: (): Promise<RuntimeState> =>
-    ipcRenderer.invoke("champion:get-state") as Promise<RuntimeState>,
-  setAutoBet: (enabled: boolean): Promise<RuntimeState> =>
+  getState: (): Promise<ClientViewState> =>
+    ipcRenderer.invoke(CLIENT_IPC.getState) as Promise<ClientViewState>,
+  register: (input: RegistrationCommand): Promise<PublicResult> =>
+    ipcRenderer.invoke(CLIENT_IPC.register, input) as Promise<PublicResult>,
+  login: (input: LoginCommand): Promise<PublicResult> =>
+    ipcRenderer.invoke(CLIENT_IPC.login, input) as Promise<PublicResult>,
+  setAutoBet: (enabled: boolean): Promise<ClientViewState> =>
     ipcRenderer.invoke(
-      "champion:set-auto-bet",
+      CLIENT_IPC.setAutoBet,
       enabled,
-    ) as Promise<RuntimeState>,
+    ) as Promise<ClientViewState>,
   getPlatformWindowState: (): Promise<{
     open: boolean;
     probe: PlatformPageProbe | null;

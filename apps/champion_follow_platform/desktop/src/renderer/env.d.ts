@@ -3,6 +3,13 @@ type ChampionRuntimeState = {
   autoBet: "OFF" | "ON";
   executionBlock: "STARTUP_SYNC_REQUIRED" | null;
   highestTask: null;
+  connection: {
+    status: "UNREGISTERED" | "CONNECTING" | "ONLINE" | "AUTH_REQUIRED" | "OFFLINE";
+    registered: boolean;
+    username: string | null;
+    deviceLabel: string | null;
+    errorCode: string | null;
+  };
 };
 
 type ChampionPlatformPageProbe = {
@@ -23,6 +30,34 @@ type ChampionPlatformPageProbe = {
 interface Window {
   championFollow: {
     getState(): Promise<ChampionRuntimeState>;
+    register(input: {
+      authorizationCode: string;
+      username: string;
+      password: string;
+    }): Promise<
+      | { ok: true }
+      | {
+          ok: false;
+          code:
+            | "INVALID_INPUT"
+            | "SERVER_UNAVAILABLE"
+            | "REGISTRATION_REJECTED"
+            | "LOGIN_REJECTED"
+            | "LOCAL_IDENTITY_UNAVAILABLE";
+        }
+    >;
+    login(input: { username: string; password: string }): Promise<
+      | { ok: true }
+      | {
+          ok: false;
+          code:
+            | "INVALID_INPUT"
+            | "SERVER_UNAVAILABLE"
+            | "REGISTRATION_REJECTED"
+            | "LOGIN_REJECTED"
+            | "LOCAL_IDENTITY_UNAVAILABLE";
+        }
+    >;
     setAutoBet(enabled: boolean): Promise<ChampionRuntimeState>;
     getPlatformWindowState(): Promise<{
       open: boolean;
