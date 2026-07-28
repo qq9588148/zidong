@@ -8,6 +8,7 @@ import type {
   RegistrationCommand,
   RuntimeState,
   SignalViewState,
+  ExecutionBlock,
 } from "../shared/ipc";
 
 type ExecutionControl = {
@@ -16,6 +17,7 @@ type ExecutionControl = {
   start?(): void;
   stop?(): void;
   isEnabled?(): boolean;
+  blockReason?(): ExecutionBlock | null;
 };
 
 const disabledExecutionControl: ExecutionControl = {
@@ -52,13 +54,18 @@ export class AppController {
   }
 
   getState(): ClientViewState {
+    const currentBlock = this.execution.blockReason?.() ??
+      this.runtime.executionBlock;
     if (this.runtime.autoBet === "ON" &&
         this.execution.isEnabled?.() === false) {
       this.runtime = {
         ...this.runtime,
         autoBet: "OFF",
-        executionBlock: "STARTUP_SYNC_REQUIRED",
+        executionBlock: currentBlock ?? "STARTUP_SYNC_REQUIRED",
       };
+    } else if (this.runtime.autoBet === "OFF" &&
+        currentBlock !== this.runtime.executionBlock) {
+      this.runtime = { ...this.runtime, executionBlock: currentBlock };
     }
     return {
       ...this.runtime,
@@ -95,6 +102,12 @@ export class AppController {
           executionBlock: null,
         };
       }
+    } else {
+      this.runtime = {
+        ...this.runtime,
+        executionBlock: this.execution.blockReason?.() ??
+          "STARTUP_SYNC_REQUIRED",
+      };
     }
     return this.getState();
   }

@@ -57,4 +57,27 @@ describe("AppController automatic execution gate", () => {
     expect(controller.getState().executionBlock).toBe("STARTUP_SYNC_REQUIRED");
     expect(setEnabled).not.toHaveBeenCalledWith(true);
   });
+
+  it("surfaces the server global stop and refuses to arm", () => {
+    const setEnabled = vi.fn();
+    const auth = {
+      initialize: vi.fn(),
+      viewState: () => ({
+        status: "ONLINE" as const,
+        registered: true,
+        username: "fixture-user",
+        deviceLabel: "fixture",
+        errorCode: null,
+      }),
+    };
+    const controller = new AppController(auth as never, signal, {
+      canEnable: () => false,
+      setEnabled,
+      blockReason: () => "SERVER_GLOBAL_STOP",
+    });
+
+    expect(controller.setAutoBet(true).autoBet).toBe("OFF");
+    expect(controller.getState().executionBlock).toBe("SERVER_GLOBAL_STOP");
+    expect(setEnabled).not.toHaveBeenCalledWith(true);
+  });
 });

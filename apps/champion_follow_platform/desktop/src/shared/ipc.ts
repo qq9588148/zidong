@@ -1,7 +1,12 @@
+export type ExecutionBlock =
+  | "STARTUP_SYNC_REQUIRED"
+  | "SERVER_GLOBAL_STOP"
+  | "SAFETY_SYNC_UNAVAILABLE";
+
 export type RuntimeState = {
   generation: string;
   autoBet: "OFF" | "ON";
-  executionBlock: "STARTUP_SYNC_REQUIRED" | null;
+  executionBlock: ExecutionBlock | null;
   highestTask: null;
 };
 

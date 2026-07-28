@@ -3,7 +3,11 @@ import { type FormEvent, useEffect, useState } from "react";
 type RuntimeState = {
   generation: string;
   autoBet: "OFF" | "ON";
-  executionBlock: "STARTUP_SYNC_REQUIRED" | null;
+  executionBlock:
+    | "STARTUP_SYNC_REQUIRED"
+    | "SERVER_GLOBAL_STOP"
+    | "SAFETY_SYNC_UNAVAILABLE"
+    | null;
   highestTask: null;
   connection: {
     status: "UNREGISTERED" | "CONNECTING" | "ONLINE" | "AUTH_REQUIRED" | "OFFLINE";
@@ -82,6 +86,12 @@ const errorLabels: Record<string, string> = {
   LOGIN_REJECTED: "账号、密码或本机设备身份验证失败。",
   LOCAL_IDENTITY_UNAVAILABLE: "本机安全身份不可用，请联系管理员重新绑定。",
 };
+
+const executionBlockLabels = {
+  STARTUP_SYNC_REQUIRED: "等待页面、信号和金额链完成安全同步",
+  SERVER_GLOBAL_STOP: "服务器全局停止已开启",
+  SAFETY_SYNC_UNAVAILABLE: "服务器安全状态暂时无法确认",
+} as const;
 
 export function App() {
   const [state, setState] = useState<RuntimeState>(safeState);
@@ -402,11 +412,17 @@ export function App() {
           <p className="section-label">服务器信号 · 自动执行</p>
           <h3>{signalCopy.title}</h3>
           <p>{signalCopy.detail}</p>
+          <p role="status">
+            执行保护：{state.executionBlock === null
+              ? "允许用户明确开启"
+              : executionBlockLabels[state.executionBlock]}
+          </p>
         </div>
         <button
           type="button"
           onClick={() => void toggleAutoBet()}
           disabled={state.autoBet !== "ON" && (
+            state.executionBlock !== null ||
             state.connection.status !== "ONLINE" ||
             platformProbe?.contractReady !== true ||
             state.signal.status !== "SYNCED"

@@ -1,7 +1,11 @@
 type ChampionRuntimeState = {
   generation: string;
   autoBet: "OFF" | "ON";
-  executionBlock: "STARTUP_SYNC_REQUIRED" | null;
+  executionBlock:
+    | "STARTUP_SYNC_REQUIRED"
+    | "SERVER_GLOBAL_STOP"
+    | "SAFETY_SYNC_UNAVAILABLE"
+    | null;
   highestTask: null;
   connection: {
     status: "UNREGISTERED" | "CONNECTING" | "ONLINE" | "AUTH_REQUIRED" | "OFFLINE";

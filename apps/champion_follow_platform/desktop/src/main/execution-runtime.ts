@@ -16,6 +16,7 @@ import {
   ReliableClientEventClient,
 } from "./client-event-client";
 import { ClientEventContract, type ClientEventType } from "./client-event-contract";
+import { parseDeviceSyncSafety } from "./device-sync";
 import { deviceKeyName } from "./device-identity";
 import { ExecutionMachine, type ExecutionRecord } from "./execution-machine";
 import { JsonExecutionStore } from "./execution-journal";
@@ -35,6 +36,7 @@ import {
   type DeviceTaskEnvelope,
   type Direction,
 } from "./task-contract";
+import type { ExecutionBlock } from "../shared/ipc";
 
 type RuntimeOptions = {
   auth: DeviceAuthClient;
@@ -61,6 +63,10 @@ export class DesktopExecutionRuntime {
   private platformState: PlatformState | null = null;
   private lastTaskKey: string | null = null;
   private pendingSettlement: ExecutionRecord | null = null;
+  private globalStopEnabled = true;
+  private deviceSyncVerified = false;
+  private nextDeviceSyncMonotonicMs = 0;
+  private tickInFlight = false;
 
   constructor(private readonly options: RuntimeOptions) {}
 
@@ -80,6 +86,8 @@ export class DesktopExecutionRuntime {
 
   canEnable(): boolean {
     return this.initialized &&
+      this.deviceSyncVerified &&
+      !this.globalStopEnabled &&
       this.options.auth.viewState().status === "ONLINE" &&
       isPlatformWindowOpen() &&
       this.platformState !== null &&
@@ -103,6 +111,14 @@ export class DesktopExecutionRuntime {
     return this.enabled;
   }
 
+  blockReason(): ExecutionBlock | null {
+    if (!this.initialized || !this.deviceSyncVerified) {
+      return "SAFETY_SYNC_UNAVAILABLE";
+    }
+    if (this.globalStopEnabled) return "SERVER_GLOBAL_STOP";
+    return this.canEnable() ? null : "STARTUP_SYNC_REQUIRED";
+  }
+
   private async initialize(): Promise<void> {
     if (this.initialized || this.initializing ||
         this.options.auth.viewState().status !== "ONLINE") return;
@@ -110,7 +126,13 @@ export class DesktopExecutionRuntime {
     if (identity === null) return;
     this.initializing = true;
     try {
-      await this.options.auth.deviceSync();
+      const sync = parseDeviceSyncSafety(
+        await this.options.auth.deviceSync(),
+        { deviceId: identity.deviceId, bindingEpoch: identity.bindingEpoch },
+      );
+      this.deviceSyncVerified = true;
+      this.globalStopEnabled = sync.globalStopEnabled;
+      this.nextDeviceSyncMonotonicMs = this.bridge.monotonicNow() + 1_000;
       try {
         const keys = TrustedTaskSigningKeys.fromResponse(
           await this.options.auth.taskSigningKeys(),
@@ -197,6 +219,8 @@ export class DesktopExecutionRuntime {
   }
 
   private async tick(): Promise<void> {
+    if (this.tickInFlight) return;
+    this.tickInFlight = true;
     try {
       await this.initialize();
       if (!this.initialized || !isPlatformWindowOpen()) {
@@ -204,6 +228,7 @@ export class DesktopExecutionRuntime {
         this.enabled = false;
         return;
       }
+      await this.refreshDeviceSync();
       const parsed = parsePlatformState(await this.bridge.readState(), {
         nowMonotonicMs: this.bridge.monotonicNow(),
       });
@@ -235,12 +260,47 @@ export class DesktopExecutionRuntime {
     } catch {
       this.enabled = false;
       this.platformState = null;
+    } finally {
+      this.tickInFlight = false;
+    }
+  }
+
+  private async refreshDeviceSync(): Promise<void> {
+    const now = this.bridge.monotonicNow();
+    if (now < this.nextDeviceSyncMonotonicMs) return;
+    this.nextDeviceSyncMonotonicMs = now + 1_000;
+    const identity = this.options.auth.runtimeIdentity();
+    if (identity === null) {
+      this.deviceSyncVerified = false;
+      this.globalStopEnabled = true;
+      this.enabled = false;
+      throw new Error("device_sync_identity_unavailable");
+    }
+    try {
+      const sync = parseDeviceSyncSafety(
+        await this.options.auth.deviceSync(),
+        { deviceId: identity.deviceId, bindingEpoch: identity.bindingEpoch },
+      );
+      this.deviceSyncVerified = true;
+      this.globalStopEnabled = sync.globalStopEnabled;
+    } catch {
+      this.deviceSyncVerified = false;
+      this.globalStopEnabled = true;
+      this.enabled = false;
+      this.scheduler?.stop();
+      throw new Error("device_sync_unavailable");
+    }
+    if (this.globalStopEnabled) {
+      this.enabled = false;
+      this.scheduler?.stop();
+      this.lastTaskKey = null;
     }
   }
 
   private freeze(task: DeviceTaskEnvelope, state: PlatformState): FrozenOrder | null {
     const identity = this.options.auth.runtimeIdentity();
-    if (!this.enabled || identity === null || task.action !== "BET" ||
+    if (!this.enabled || this.globalStopEnabled || identity === null ||
+        task.action !== "BET" ||
         this.bankroll === null || this.pendingSettlement !== null ||
         state.currentBalanceFen === null) return null;
     const plan = planNextStake(this.bankroll, state.currentBalanceFen);
@@ -265,7 +325,8 @@ export class DesktopExecutionRuntime {
       order,
       stillCurrent: () => {
         const current = this.options.signals.currentTask();
-        return this.enabled && current?.action === "BET" &&
+        return this.enabled && !this.globalStopEnabled &&
+          current?.action === "BET" &&
           current.task_id === order.taskId &&
           current.revision === order.taskRevision;
       },

@@ -292,4 +292,31 @@ describe("App registration state", () => {
     })).toBeDisabled();
     expect(document.body.textContent).not.toMatch(/actor_ref|signature|device_id/);
   });
+
+  it("shows the server global stop as an execution protection", async () => {
+    window.championFollow = {
+      getState: vi.fn(async () => ({
+        ...baseState,
+        executionBlock: "SERVER_GLOBAL_STOP" as const,
+        connection: {
+          status: "ONLINE" as const,
+          registered: true,
+          username: "client-user",
+          deviceLabel: "90abcdef",
+          errorCode: null,
+        },
+      })),
+      register: vi.fn(),
+      login: vi.fn(),
+      setAutoBet: vi.fn(),
+      getPlatformWindowState: vi.fn(async () => emptyPlatformState),
+      openPlatformLogin: vi.fn(),
+      quitApp: vi.fn(),
+    };
+
+    render(<App />);
+
+    expect(await screen.findByText(/服务器全局停止已开启/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "开启自动执行" })).toBeDisabled();
+  });
 });
