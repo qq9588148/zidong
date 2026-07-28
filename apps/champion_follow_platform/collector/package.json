@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "privacy:scan": "node scripts/privacy-scan.mjs",
-    "verify": "npm run typecheck && npm test && npm run build && npm run privacy:scan"
+    "verify": "npm run typecheck && npm test && npm run build && npm run privacy:scan",
+    "dist:win:dir": "npm run build && electron-builder --win dir --x64"
   },
   "dependencies": {
     "zod": "4.4.3"
@@ -18,8 +19,26 @@
   "devDependencies": {
     "@types/node": "24.13.3",
     "electron": "43.2.0",
+    "electron-builder": "26.15.3",
     "esbuild": "0.28.1",
     "typescript": "7.0.2",
     "vitest": "4.1.10"
+  },
+  "build": {
+    "appId": "com.championfollow.collector",
+    "productName": "Champion Follow Collector",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ]
+    }
   }
 }
