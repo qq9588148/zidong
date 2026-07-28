@@ -38,6 +38,7 @@ from champion_follow_server.schemas.auth import (
     UserRefreshRequest,
     UserSessionResponse,
 )
+from champion_follow_server.schemas.admin import UserReportResponse
 from champion_follow_server.services.device_binding import InvalidEnrollment
 from champion_follow_server.services.sessions import AuthenticationFailed
 
@@ -366,8 +367,17 @@ async def admin_logout(
     )
 
 
-@router.get("/api/v1/me/report", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def pending_own_report(
-    _context: UserContext = Depends(require_user_context),
+@router.get("/api/v1/me/report", response_model=UserReportResponse)
+async def own_report(
+    response: Response,
+    request: Request,
+    context: UserContext = Depends(require_user_context),
+    db_session=Depends(get_session),
 ):
-    return {"detail": "reporting not implemented"}
+    _no_store(response)
+    report = await request.app.state.report_service.for_account(
+        db_session,
+        account_id=context.account.id,
+        now=request.app.state.clock.now(),
+    )
+    return UserReportResponse.model_validate(report)

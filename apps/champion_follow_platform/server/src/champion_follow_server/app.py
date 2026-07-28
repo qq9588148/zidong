@@ -5,6 +5,7 @@ from champion_follow.db import open_pool
 from champion_follow.main import configure_core_services, register_core_routers
 from fastapi import FastAPI
 
+from .api.admin import router as admin_router
 from .api.auth import router as auth_router
 from .api.device_ws import router as device_ws_router
 from .api.device_events import router as device_events_router
@@ -19,6 +20,7 @@ from .services.device_binding import DeviceBindingService
 from .services.device_allocator import DeviceAllocator
 from .services.device_ledger import DeviceLedgerService
 from .services.device_task_revisions import DeviceTaskRevisionService
+from .services.reports import ReportService
 from .services.sessions import SessionService
 from .services.task_hub import TaskHub
 from .services.thresholds import ThresholdService
@@ -62,6 +64,7 @@ def configure_auth_services(
     )
     app.state.task_hub = TaskHub()
     app.state.device_ledger = DeviceLedgerService(resolved_clock)
+    app.state.report_service = ReportService()
     app.state.authorization_code_service = authorization_codes
     app.state.binding_service = DeviceBindingService(
         authorization_codes,
@@ -117,6 +120,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = resolved
     register_core_routers(app)
     app.include_router(auth_router)
+    app.include_router(admin_router)
     app.include_router(device_ws_router)
     app.include_router(device_events_router)
     return app
