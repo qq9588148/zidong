@@ -38,7 +38,7 @@ export function resolveCollectorConfig(
 
   const platformUrl = httpsUrl(
     environment.CHAMPION_PLATFORM_URL ??
-      (mode === "local" ? "https://ng1z.com/" : undefined),
+      (mode === "local" ? "https://ng888.com/" : undefined),
   );
   const serverUrl = mode === "server"
     ? httpsUrl(environment.CHAMPION_COLLECTOR_SERVER_URL)

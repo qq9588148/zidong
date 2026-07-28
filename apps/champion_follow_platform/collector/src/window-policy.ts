@@ -49,15 +49,17 @@ export function configureCollectorSession(
 export async function loadPlatformUntilAccepted(
   load: () => Promise<void>,
   shouldContinue: () => boolean,
-  waitForRetry: () => Promise<void>,
+  waitForRetry: (retryCount: number) => Promise<void>,
 ): Promise<boolean> {
+  let retryCount = 0;
   while (shouldContinue()) {
     try {
       await load();
       return true;
     } catch {
       if (!shouldContinue()) return false;
-      await waitForRetry();
+      retryCount += 1;
+      await waitForRetry(retryCount);
     }
   }
   return false;
@@ -69,6 +71,15 @@ export function sameOriginNavigation(
 ): boolean {
   try {
     return new URL(target).origin === platformOrigin;
+  } catch {
+    return false;
+  }
+}
+
+export function isSecurePlatformNavigation(target: string): boolean {
+  try {
+    const url = new URL(target);
+    return url.protocol === "https:" && !url.username && !url.password;
   } catch {
     return false;
   }
@@ -86,19 +97,19 @@ export function denyWindowOpen(_details?: unknown): { action: "deny" } {
   return { action: "deny" };
 }
 
-export function navigationGuard(platformOrigin: string) {
+export function navigationGuard(_platformOrigin?: string) {
   return (event: { preventDefault(): void }, target: string): void => {
-    if (!sameOriginNavigation(target, platformOrigin)) event.preventDefault();
+    if (!isSecurePlatformNavigation(target)) event.preventDefault();
   };
 }
 
 export function installCollectorWindowPolicy(
   session: Session,
   webContents: WebContents,
-  platformOrigin: string,
+  _platformOrigin?: string,
 ): void {
   session.setPermissionRequestHandler(denyPermissionRequest);
   webContents.setWindowOpenHandler(denyWindowOpen);
-  webContents.on("will-navigate", navigationGuard(platformOrigin));
-  webContents.on("will-redirect", navigationGuard(platformOrigin));
+  webContents.on("will-navigate", navigationGuard());
+  webContents.on("will-redirect", navigationGuard());
 }

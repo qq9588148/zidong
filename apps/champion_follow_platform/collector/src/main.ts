@@ -18,6 +18,7 @@ import {
   collectorWindowTitle,
   resolveCollectorConfig,
 } from "./collector-mode.js";
+import { connectionPageUrl } from "./connection-page.js";
 import { capturedEventSchema, type CapturedEvent } from "./contracts.js";
 import {
   CollectorCredentialStore,
@@ -48,8 +49,8 @@ import {
   collectorWebPreferences,
   configureCollectorSession,
   installCollectorWindowPolicy,
+  isSecurePlatformNavigation,
   loadPlatformUntilAccepted,
-  sameOriginNavigation,
 } from "./window-policy.js";
 
 const distRoot = dirname(fileURLToPath(import.meta.url));
@@ -87,7 +88,6 @@ async function run(): Promise<void> {
 
   const config = resolveCollectorConfig(process.env);
   const platformUrl = config.platformUrl;
-  const platformOrigin = new URL(platformUrl).origin;
   const runtimeRoot = join(app.getPath("userData"), "main-collector-v1");
   await mkdir(runtimeRoot, { recursive: true, mode: 0o700 });
 
@@ -155,7 +155,7 @@ async function run(): Promise<void> {
       collectorWindow !== null &&
       event.sender.id === collectorWindow.webContents.id &&
       event.senderFrame === collectorWindow.webContents.mainFrame &&
-      sameOriginNavigation(frameUrl, platformOrigin)
+      isSecurePlatformNavigation(frameUrl)
     );
   }
 
@@ -455,6 +455,7 @@ async function run(): Promise<void> {
         webPreferences: collectorWebPreferences(preloadPath),
       });
       collectorWindow = window;
+      let platformConnected = false;
       window.on("close", (event) => {
         if (collectorWindowMayClose) return;
         event.preventDefault();
@@ -462,6 +463,10 @@ async function run(): Promise<void> {
       });
       const updateTitle = (): void => {
         if (window.isDestroyed()) return;
+        if (!platformConnected) {
+          window.setTitle("NG 主采集 · 正在连接（自动重试）");
+          return;
+        }
         const heartbeat = collectorRuntime?.currentHeartbeat();
         window.setTitle(collectorWindowTitle({
           healthy: captureStopped ? false : (heartbeat?.capture_healthy ?? true),
@@ -476,8 +481,8 @@ async function run(): Promise<void> {
       installCollectorWindowPolicy(
         window.webContents.session,
         window.webContents,
-        platformOrigin,
       );
+      await window.loadURL(connectionPageUrl(0));
       navigationRecovery = new NavigationRecoveryCoordinator({
         async pause() {
           await stopHistoryRecovery();
@@ -515,7 +520,10 @@ async function run(): Promise<void> {
         },
       });
       window.webContents.on("did-frame-finish-load", (_event, isMainFrame) => {
-        if (!isMainFrame || !sameOriginNavigation(window.webContents.getURL(), platformOrigin)) {
+        if (
+          !isMainFrame ||
+          !isSecurePlatformNavigation(window.webContents.getURL())
+        ) {
           return;
         }
         void navigationRecovery?.committedMainFrame().done.catch(() => undefined);
@@ -618,9 +626,22 @@ async function run(): Promise<void> {
       });
 
       void loadPlatformUntilAccepted(
-        () => window.loadURL(platformUrl),
+        async () => {
+          await window.loadURL(platformUrl);
+          platformConnected = true;
+          recordCaptureStatus("page_connected");
+          updateTitle();
+        },
         () => !window.isDestroyed() && !cleaned,
-        () => new Promise((resolve) => setTimeout(resolve, 1_000)),
+        async (retryCount) => {
+          platformConnected = false;
+          recordCaptureStatus("waiting_for_page");
+          updateTitle();
+          await window.loadURL(connectionPageUrl(retryCount)).catch(
+            () => undefined,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 3_000));
+        },
       );
       return window;
     },

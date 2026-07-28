@@ -10,7 +10,7 @@ describe("collector local mode", () => {
   it("defaults to local collection without requiring a server", () => {
     expect(resolveCollectorConfig({})).toEqual({
       mode: "local",
-      platformUrl: "https://ng1z.com/",
+      platformUrl: "https://ng888.com/",
       serverUrl: null,
     });
     expect(

@@ -7,6 +7,7 @@ import {
   denyPermissionRequest,
   denyWindowOpen,
   installCollectorWindowPolicy,
+  isSecurePlatformNavigation,
   loadPlatformUntilAccepted,
   navigationGuard,
   sameOriginNavigation,
@@ -38,7 +39,7 @@ describe("collector Electron window policy", () => {
     expect(denyWindowOpen()).toEqual({ action: "deny" });
   });
 
-  it("allows only navigation within the configured platform origin", () => {
+  it("keeps same-origin checks available for strict call sites", () => {
     const origin = "https://platform.example";
     expect(sameOriginNavigation(`${origin}/game28`, origin)).toBe(true);
     expect(sameOriginNavigation("https://other.example/game28", origin)).toBe(
@@ -46,17 +47,20 @@ describe("collector Electron window policy", () => {
     );
     expect(sameOriginNavigation("not a url", origin)).toBe(false);
 
+  });
+
+  it("allows random HTTPS redirects but blocks unsafe schemes", () => {
     const allowed = { preventDefault: vi.fn() };
     const blocked = { preventDefault: vi.fn() };
-    const guard = navigationGuard(origin);
-    guard(allowed, `${origin}/login`);
-    guard(blocked, "https://other.example/phishing");
+    const guard = navigationGuard();
+    guard(allowed, "https://random-entry.example/login");
+    guard(blocked, "http://ng888.com/login");
 
     expect(allowed.preventDefault).not.toHaveBeenCalled();
     expect(blocked.preventDefault).toHaveBeenCalledOnce();
   });
 
-  it("installs the same origin guard for navigations and redirects", () => {
+  it("installs the secure navigation guard for navigations and redirects", () => {
     const events: string[] = [];
     const fakeSession = {
       setPermissionRequestHandler: vi.fn(),
@@ -76,6 +80,15 @@ describe("collector Electron window policy", () => {
     );
 
     expect(events).toEqual(["will-navigate", "will-redirect"]);
+  });
+
+  it("allows ng888 to redirect to a random secure landing domain", () => {
+    expect(isSecurePlatformNavigation("https://ng888.com/")).toBe(true);
+    expect(
+      isSecurePlatformNavigation("https://random-entry.example/login"),
+    ).toBe(true);
+    expect(isSecurePlatformNavigation("http://ng888.com/")).toBe(false);
+    expect(isSecurePlatformNavigation("file:///C:/private.txt")).toBe(false);
   });
 
   it("forces the persistent collector session to connect directly", async () => {
@@ -98,19 +111,22 @@ describe("collector Electron window policy", () => {
   it("keeps retrying a transient initial page failure without exiting", async () => {
     let attempts = 0;
     let waits = 0;
+    const retryNumbers: number[] = [];
     const loaded = await loadPlatformUntilAccepted(
       async () => {
         attempts += 1;
         if (attempts < 3) throw new Error("ERR_CONNECTION_RESET");
       },
       () => true,
-      async () => {
+      async (retryNumber) => {
         waits += 1;
+        retryNumbers.push(retryNumber);
       },
     );
 
     expect(loaded).toBe(true);
     expect(attempts).toBe(3);
     expect(waits).toBe(2);
+    expect(retryNumbers).toEqual([1, 2]);
   });
 });
