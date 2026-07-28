@@ -27,6 +27,16 @@ type ChampionPlatformPageProbe = {
   contractReady: boolean;
 };
 
+type ChampionPlatformSessionState = {
+  encryptionAvailable: boolean | null;
+  snapshotLoaded: boolean;
+  snapshotPresent: boolean;
+  pageOriginAllowed: boolean | null;
+  captureStatus: "IDLE" | "SAVED" | "UNCHANGED" | "SKIPPED" | "FAILED";
+  restoreStatus: "IDLE" | "RESTORED" | "NOT_FOUND" | "SKIPPED" | "FAILED";
+  errorCode: string | null;
+};
+
 interface Window {
   championFollow: {
     getState(): Promise<ChampionRuntimeState>;
@@ -62,6 +72,7 @@ interface Window {
     getPlatformWindowState(): Promise<{
       open: boolean;
       probe: ChampionPlatformPageProbe | null;
+      session: ChampionPlatformSessionState;
     }>;
     openPlatformLogin(): Promise<{ ok: true; open: true }>;
     quitApp(): Promise<{ ok: true }>;

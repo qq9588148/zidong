@@ -36,6 +36,16 @@ type PlatformPageProbe = {
   contractReady: boolean;
 };
 
+type PlatformSessionPersistenceState = {
+  encryptionAvailable: boolean | null;
+  snapshotLoaded: boolean;
+  snapshotPresent: boolean;
+  pageOriginAllowed: boolean | null;
+  captureStatus: "IDLE" | "SAVED" | "UNCHANGED" | "SKIPPED" | "FAILED";
+  restoreStatus: "IDLE" | "RESTORED" | "NOT_FOUND" | "SKIPPED" | "FAILED";
+  errorCode: string | null;
+};
+
 const api = Object.freeze({
   getState: (): Promise<ClientViewState> =>
     ipcRenderer.invoke(CLIENT_IPC.getState) as Promise<ClientViewState>,
@@ -51,9 +61,11 @@ const api = Object.freeze({
   getPlatformWindowState: (): Promise<{
     open: boolean;
     probe: PlatformPageProbe | null;
+    session: PlatformSessionPersistenceState;
   }> => ipcRenderer.invoke("champion:get-platform-window-state") as Promise<{
     open: boolean;
     probe: PlatformPageProbe | null;
+    session: PlatformSessionPersistenceState;
   }>,
   openPlatformLogin: (): Promise<{ ok: true; open: true }> =>
     ipcRenderer.invoke("champion:open-platform-login") as Promise<{ ok: true; open: true }>,

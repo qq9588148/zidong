@@ -13,6 +13,20 @@ const baseState = {
   highestTask: null,
 };
 
+const emptyPlatformState = {
+  open: false,
+  probe: null,
+  session: {
+    encryptionAvailable: null,
+    snapshotLoaded: false,
+    snapshotPresent: false,
+    pageOriginAllowed: null,
+    captureStatus: "IDLE" as const,
+    restoreStatus: "IDLE" as const,
+    errorCode: null,
+  },
+};
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -34,7 +48,7 @@ describe("App registration state", () => {
       register: vi.fn(),
       login: vi.fn(),
       setAutoBet: vi.fn(),
-      getPlatformWindowState: vi.fn(async () => ({ open: false, probe: null })),
+      getPlatformWindowState: vi.fn(async () => emptyPlatformState),
       openPlatformLogin: vi.fn(),
       quitApp: vi.fn(),
     };
@@ -61,7 +75,7 @@ describe("App registration state", () => {
       register: vi.fn(),
       login: vi.fn(),
       setAutoBet: vi.fn(),
-      getPlatformWindowState: vi.fn(async () => ({ open: false, probe: null })),
+      getPlatformWindowState: vi.fn(async () => emptyPlatformState),
       openPlatformLogin: vi.fn(),
       quitApp: vi.fn(),
     };
@@ -91,7 +105,7 @@ describe("App registration state", () => {
       })),
       login: vi.fn(),
       setAutoBet: vi.fn(),
-      getPlatformWindowState: vi.fn(async () => ({ open: false, probe: null })),
+      getPlatformWindowState: vi.fn(async () => emptyPlatformState),
       openPlatformLogin: vi.fn(),
       quitApp: vi.fn(),
     };
@@ -146,7 +160,7 @@ describe("App registration state", () => {
       register: vi.fn(async () => ({ ok: true as const })),
       login: vi.fn(),
       setAutoBet: vi.fn(),
-      getPlatformWindowState: vi.fn(async () => ({ open: false, probe: null })),
+      getPlatformWindowState: vi.fn(async () => emptyPlatformState),
       openPlatformLogin: vi.fn(),
       quitApp: vi.fn(),
     };

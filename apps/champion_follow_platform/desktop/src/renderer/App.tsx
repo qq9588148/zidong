@@ -17,6 +17,9 @@ type RuntimeState = {
 type PlatformPageProbe = Awaited<
   ReturnType<typeof window.championFollow.getPlatformWindowState>
 >["probe"];
+type PlatformSessionState = Awaited<
+  ReturnType<typeof window.championFollow.getPlatformWindowState>
+>["session"];
 
 type AuthFeedback = {
   kind: "success" | "error";
@@ -50,6 +53,15 @@ export function App() {
   const [state, setState] = useState<RuntimeState>(safeState);
   const [platformOpen, setPlatformOpen] = useState(false);
   const [platformProbe, setPlatformProbe] = useState<PlatformPageProbe>(null);
+  const [platformSession, setPlatformSession] = useState<PlatformSessionState>({
+    encryptionAvailable: null,
+    snapshotLoaded: false,
+    snapshotPresent: false,
+    pageOriginAllowed: null,
+    captureStatus: "IDLE",
+    restoreStatus: "IDLE",
+    errorCode: null,
+  });
   const [openingPlatform, setOpeningPlatform] = useState(false);
   const [authorizationCode, setAuthorizationCode] = useState("");
   const [username, setUsername] = useState("");
@@ -75,6 +87,7 @@ export function App() {
         if (active) {
           setPlatformOpen(value.open);
           setPlatformProbe(value.probe);
+          setPlatformSession(value.session);
         }
       });
     };
@@ -314,6 +327,13 @@ export function App() {
             页面合同：{platformProbe?.contractReady
               ? "已完整识别（只读）"
               : `已识别 ${detectedContractParts}/6 项（不会下注）`}
+          </p>
+          <p>
+            登录态保存：{platformSession.snapshotPresent
+              ? "已加密保存"
+              : platformSession.errorCode
+                ? `未保存（${platformSession.errorCode}）`
+                : "正在检测"}
           </p>
         </div>
         <button

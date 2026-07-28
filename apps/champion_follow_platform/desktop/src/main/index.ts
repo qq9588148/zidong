@@ -1,5 +1,4 @@
 import { app, BrowserWindow, ipcMain } from "electron";
-import { rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { AppController, initialRuntimeState } from "./app-controller";
@@ -10,6 +9,7 @@ import { desktopPaths } from "./paths";
 import {
   allowPlatformWindowCloseForExit,
   getLatestPlatformPageProbe,
+  getPlatformSessionPersistenceState,
   isPlatformWindowOpen,
   openNgPlatformWindow,
 } from "./platform-window";
@@ -51,6 +51,7 @@ function registerAppIpc(controller: AppController): void {
   ipcMain.handle("champion:get-platform-window-state", () => ({
     open: isPlatformWindowOpen(),
     probe: getLatestPlatformPageProbe(),
+    session: getPlatformSessionPersistenceState(),
   }));
   ipcMain.handle("champion:open-platform-login", () => {
     openNgPlatformWindow();
@@ -86,18 +87,6 @@ function openMainWindow(): BrowserWindow {
   return window;
 }
 
-function removeObsoleteProtectedSessionSnapshots(): void {
-  const directory = join(
-    app.getPath("userData"),
-    "Partitions",
-    "champion-platform-local-desktop",
-    "Protected Session",
-  );
-  for (const name of ["cookies.enc", "session-storage.enc"]) {
-    rmSync(join(directory, name), { force: true });
-  }
-}
-
 if (process.env.VITEST !== "true" && app) {
   if (!app.requestSingleInstanceLock()) {
     app.quit();
@@ -109,7 +98,6 @@ if (process.env.VITEST !== "true" && app) {
     });
     app.on("second-instance", () => openMainWindow());
     app.whenReady().then(() => {
-      removeObsoleteProtectedSessionSnapshots();
       const authClient = new DeviceAuthClient({
         baseUrl: DEFAULT_SERVER_BASE_URL,
         helper: createNativeHelper(),
