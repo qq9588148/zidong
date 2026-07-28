@@ -1,20 +1,39 @@
 export type PlatformGameEntryResult =
   | "AUTH_REQUIRED"
+  | "LOBBY_OPENED"
   | "CLICKED"
   | "NOT_FOUND";
 
 export type PlatformBetPanelPrimeResult = "READY" | "OPENED" | "NOT_FOUND";
 
 export function clickBtcFfcEntry(document: Document): PlatformGameEntryResult {
-  if ((document.body?.innerText ?? "").includes("请先登录或注册")) {
-    return "AUTH_REQUIRED";
-  }
-  const title = Array.from(document.querySelectorAll("p.game-title"))
+  const exactTitle = Array.from(document.querySelectorAll("p.game-title"))
     .find((element) => (element.textContent ?? "").trim() === "比特分分彩");
-  const card = title?.closest(".lottery-game");
-  if (card === null || card === undefined ||
-      typeof (card as HTMLElement).click !== "function") return "NOT_FOUND";
-  (card as HTMLElement).click();
+  const fallbackTitle = exactTitle ?? Array.from(document.querySelectorAll("*"))
+    .find((element) => element.children.length === 0 &&
+      (element.textContent ?? "")
+      .replace(/\s+/g, "").trim() === "比特分分彩");
+  if (fallbackTitle === undefined) {
+    const lobbyLabel = Array.from(document.querySelectorAll("*"))
+      .find((element) => element.children.length === 0 &&
+        (element.textContent ?? "")
+        .replace(/\s+/g, "").trim() === "大厅");
+    const lobbyTarget = lobbyLabel?.closest(
+      ".van-tabbar-item, [role='tab'], a, button",
+    ) ?? lobbyLabel;
+    if (lobbyTarget && typeof (lobbyTarget as HTMLElement).click === "function") {
+      (lobbyTarget as HTMLElement).click();
+      return "LOBBY_OPENED";
+    }
+    return (document.body?.innerText ?? "").includes("请先登录或注册")
+      ? "AUTH_REQUIRED"
+      : "NOT_FOUND";
+  }
+  const target = fallbackTitle.closest(
+    ".lottery-game, a, button, [role='button']",
+  ) ?? fallbackTitle;
+  if (typeof (target as HTMLElement).click !== "function") return "NOT_FOUND";
+  (target as HTMLElement).click();
   return "CLICKED";
 }
 

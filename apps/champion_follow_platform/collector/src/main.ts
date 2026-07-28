@@ -15,6 +15,7 @@ import {
 
 import { CAPTURE_EVENT_CHUNK_LIMIT } from "./capture-pipeline.js";
 import {
+  btcFfcGameUrl,
   CollectorEntryStore,
   clickBtcFfcEntry,
 } from "./collector-entry.js";
@@ -671,6 +672,11 @@ async function run(): Promise<void> {
             entryUrl = platformUrl;
             await window.loadURL(entryUrl);
           }
+          const directGameUrl = btcFfcGameUrl(window.webContents.getURL());
+          if (directGameUrl !== null &&
+              new URL(window.webContents.getURL()).pathname === "/home") {
+            await window.loadURL(directGameUrl).catch(() => undefined);
+          }
           platformConnected = true;
           recordCaptureStatus("page_connected");
           updateTitle();
@@ -678,9 +684,14 @@ async function run(): Promise<void> {
             const script = `(${clickBtcFfcEntry.toString()})(document)`;
             gameEntryTimer = setInterval(() => {
               if (window.isDestroyed() || cleaned) return;
-              void window.webContents.executeJavaScript(script).catch(
-                () => undefined,
-              );
+              const frames = [
+                window.webContents.mainFrame,
+                ...window.webContents.mainFrame.frames,
+              ];
+              for (const frame of frames) {
+                if (frame.isDestroyed()) continue;
+                void frame.executeJavaScript(script).catch(() => undefined);
+              }
             }, 2_000);
           }
         },

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  btcFfcGameUrl,
   CollectorEntryStore,
   clickBtcFfcEntry,
   sanitizeCollectorEntryUrl,
@@ -17,6 +18,9 @@ describe("collector entry recovery", () => {
     expect(sanitizeCollectorEntryUrl("https://random.example/?token=secret"))
       .toBeNull();
     expect(sanitizeCollectorEntryUrl("http://random.example/game")).toBeNull();
+    expect(btcFfcGameUrl("https://random.example/home"))
+      .toBe("https://random.example/game");
+    expect(btcFfcGameUrl("https://user:pass@random.example/home")).toBeNull();
 
     const root = await mkdtemp(join(tmpdir(), "collector-entry-"));
     const path = join(root, "entry.json");
@@ -54,5 +58,20 @@ describe("collector entry recovery", () => {
     expect(clickBtcFfcEntry(loggedIn)).toBe("CLICKED");
     expect(exactClick).toHaveBeenCalledOnce();
     expect(otherClick).not.toHaveBeenCalled();
+  });
+
+  it("opens the lobby before searching for the exact game card", () => {
+    const lobbyClick = vi.fn();
+    const lobby = {
+      textContent: "大厅",
+      closest: () => ({ click: lobbyClick }),
+    };
+    const sessionPage = {
+      body: { innerText: "会话" },
+      querySelectorAll: (selector: string) => selector === "*" ? [lobby] : [],
+    } as unknown as Document;
+
+    expect(clickBtcFfcEntry(sessionPage)).toBe("LOBBY_OPENED");
+    expect(lobbyClick).toHaveBeenCalledOnce();
   });
 });

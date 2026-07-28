@@ -22,19 +22,12 @@ describe("NG game entry", () => {
   });
 
   it("does not enter a game before the platform session is authenticated", () => {
-    document.body.innerHTML = `
-      <section class="lottery-game" id="target">
-        <p class="game-title">比特分分彩</p>
-      </section>`;
+    document.body.innerHTML = `<section>登录页面</section>`;
     Object.defineProperty(document.body, "innerText", {
       configurable: true,
       value: "请先登录或注册",
     });
-    const target = document.querySelector<HTMLElement>("#target")!;
-    const click = vi.spyOn(target, "click");
-
     expect(clickBtcFfcEntry(document)).toBe("AUTH_REQUIRED");
-    expect(click).not.toHaveBeenCalled();
     Object.defineProperty(document.body, "innerText", {
       configurable: true,
       value: "",
@@ -46,6 +39,16 @@ describe("NG game entry", () => {
       <section class="lottery-game"><p class="game-title">比特28</p></section>`;
 
     expect(clickBtcFfcEntry(document)).toBe("NOT_FOUND");
+  });
+
+  it("opens the bottom lobby tab before searching for the game card", () => {
+    document.body.innerHTML = `
+      <nav class="van-tabbar-item" id="lobby"><span>大厅</span></nav>`;
+    const lobby = document.querySelector<HTMLElement>("#lobby")!;
+    const click = vi.spyOn(lobby, "click");
+
+    expect(clickBtcFfcEntry(document)).toBe("LOBBY_OPENED");
+    expect(click).toHaveBeenCalledOnce();
   });
 
   it("opens only the outer bet panel control without selecting or submitting", () => {
