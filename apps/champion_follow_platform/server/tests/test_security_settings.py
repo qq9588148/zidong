@@ -41,3 +41,12 @@ def test_http_admin_origin_is_rejected() -> None:
             allocation_seed_path=Path("/run/secrets/allocation-seed.key"),
             token_pepper="test-only-token-pepper-with-32-bytes",
         )
+
+
+def test_alembic_requires_only_the_database_url_setting() -> None:
+    source = (Path(__file__).parents[1] / "alembic" / "env.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'environ.get("CHAMPION_DATABASE_URL")' in source
+    assert "Settings()" not in source

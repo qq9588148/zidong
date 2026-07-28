@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from logging.config import fileConfig
+from os import environ
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from champion_follow_server import models  # noqa: F401
-from champion_follow_server.config import Settings
 from champion_follow_server.db.base import Base
 
 
@@ -69,7 +69,10 @@ def do_run_migrations(connection):
 
 async def run_migrations() -> None:
     section = config.get_section(config.config_ini_section) or {}
-    section["sqlalchemy.url"] = Settings().database_url
+    database_url = environ.get("CHAMPION_DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("CHAMPION_DATABASE_URL is required for migrations")
+    section["sqlalchemy.url"] = database_url
     connectable = async_engine_from_config(
         section,
         prefix="sqlalchemy.",
