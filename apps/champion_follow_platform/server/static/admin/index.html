@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Champion Follow 管理中心</title>
+    <link rel="stylesheet" href="/admin/style.css">
+    <script src="/admin/app.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <main id="login-panel" class="login-shell">
+      <section class="login-card" aria-labelledby="login-title">
+        <div class="brand-mark" aria-hidden="true">CF</div>
+        <p class="eyebrow">Champion Follow</p>
+        <h1 id="login-title">管理中心</h1>
+        <p class="muted">集中查看设备、用户、冠军信号和运行风险。</p>
+        <form id="login-form" class="form-stack">
+          <label>
+            管理员账号
+            <input id="login-username" name="username" autocomplete="username" required maxlength="80">
+          </label>
+          <label>
+            密码
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <label>
+            双重验证码
+            <input id="login-totp" name="totp" inputmode="numeric" autocomplete="one-time-code" required minlength="6" maxlength="8">
+          </label>
+          <button id="login-submit" class="button button-primary" type="submit">安全登录</button>
+          <p id="login-message" class="form-message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <div id="dashboard-shell" class="app-shell" hidden>
+      <aside class="sidebar">
+        <div class="brand-lockup">
+          <div class="brand-mark small" aria-hidden="true">CF</div>
+          <div>
+            <strong>Champion Follow</strong>
+            <span>运营管理中心</span>
+          </div>
+        </div>
+        <nav aria-label="后台导航">
+          <button class="nav-button active" data-panel="overview-panel" type="button">运行总览</button>
+          <button class="nav-button" data-panel="users-panel" type="button">用户与设备</button>
+          <button class="nav-button" data-panel="champions-panel" type="button">冠军画像</button>
+          <button class="nav-button" data-panel="tasks-panel" type="button">任务流水</button>
+          <button class="nav-button" data-panel="threshold-panel" type="button">门槛策略</button>
+          <button class="nav-button" data-panel="authorization-panel" type="button">授权管理</button>
+          <button class="nav-button" data-panel="audit-panel" type="button">审计记录</button>
+        </nav>
+        <div class="sidebar-footer">
+          <span id="session-status" class="status-badge status-online">已安全连接</span>
+          <button id="logout-button" class="button button-quiet" type="button">退出登录</button>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="workspace-header">
+          <div>
+            <p class="eyebrow">实时运营视图</p>
+            <h1 id="page-title">运行总览</h1>
+          </div>
+          <div class="header-actions">
+            <span id="last-updated" class="muted">等待刷新</span>
+            <button id="refresh-button" class="button button-secondary" type="button">立即刷新</button>
+          </div>
+        </header>
+
+        <p id="dashboard-message" class="banner" role="status" aria-live="polite" hidden></p>
+
+        <section id="overview-panel" class="panel active-panel" aria-labelledby="overview-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h2 id="overview-title">运行总览</h2>
+            </div>
+            <span id="global-status-badge" class="status-badge">读取中</span>
+          </div>
+          <div class="metric-grid">
+            <article class="metric-card">
+              <span>授权用户</span>
+              <strong id="metric-users">—</strong>
+              <small>当前账号总数</small>
+            </article>
+            <article class="metric-card">
+              <span>在线执行设备</span>
+              <strong id="metric-devices">—</strong>
+              <small>已绑定且可用</small>
+            </article>
+            <article class="metric-card">
+              <span>用户合计余额</span>
+              <strong id="metric-balance">—</strong>
+              <small>仅取平台最新观测</small>
+            </article>
+            <article class="metric-card">
+              <span>今日流水</span>
+              <strong id="metric-turnover">—</strong>
+              <small>已结算订单口径</small>
+            </article>
+            <article class="metric-card">
+              <span>今日输赢</span>
+              <strong id="metric-today-pnl">—</strong>
+              <small>Asia/Shanghai</small>
+            </article>
+            <article class="metric-card">
+              <span>累计输赢</span>
+              <strong id="metric-total-pnl">—</strong>
+              <small>从首笔已结算订单起</small>
+            </article>
+          </div>
+
+          <article class="danger-zone">
+            <div>
+              <p class="eyebrow danger-text">Safety control</p>
+              <h3>全局停止</h3>
+              <p>启用后，所有尚未执行的下注任务都会收到更高版本的取消指令。</p>
+            </div>
+            <div class="danger-controls">
+              <label for="global-stop-reason">操作原因</label>
+              <input id="global-stop-reason" maxlength="500" placeholder="必须填写，可供审计追溯">
+              <button id="global-stop" class="button button-danger" type="button">启用全局停止</button>
+            </div>
+          </article>
+        </section>
+
+        <section id="users-panel" class="panel" aria-labelledby="users-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Accounts</p>
+              <h2 id="users-title">用户与设备</h2>
+            </div>
+            <button id="users-next" class="button button-secondary" type="button" hidden>下一页</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>用户</th>
+                  <th>状态</th>
+                  <th>余额</th>
+                  <th>今日</th>
+                  <th>本周</th>
+                  <th>本月</th>
+                  <th>累计</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="users-body"></tbody>
+            </table>
+          </div>
+          <article id="user-detail" class="detail-card" hidden>
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">Selected user</p>
+                <h3 id="user-detail-title">用户详情</h3>
+              </div>
+              <span id="user-detail-status" class="status-badge"></span>
+            </div>
+            <div id="user-detail-metrics" class="detail-grid"></div>
+            <div class="action-row">
+              <label class="grow">
+                管理操作原因
+                <input id="user-action-reason" maxlength="500" placeholder="解绑或停用前必须填写">
+              </label>
+              <button id="unbind-device-button" class="button button-secondary" type="button">解绑当前设备</button>
+              <button id="disable-account-button" class="button button-danger" type="button">停用账号</button>
+            </div>
+          </article>
+        </section>
+
+        <section id="champions-panel" class="panel" aria-labelledby="champions-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Champion profiles</p>
+              <h2 id="champions-title">冠军画像</h2>
+            </div>
+            <button id="champions-next" class="button button-secondary" type="button" hidden>下一页</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>匿名冠军</th>
+                  <th>市场</th>
+                  <th>方向</th>
+                  <th>等级</th>
+                  <th>样本</th>
+                  <th>原始胜率</th>
+                  <th>保守胜率</th>
+                  <th>保守回报</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody id="champions-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="tasks-panel" class="panel" aria-labelledby="tasks-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Task revisions</p>
+              <h2 id="tasks-title">任务流水</h2>
+            </div>
+            <button id="tasks-next" class="button button-secondary" type="button" hidden>下一页</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>期号</th>
+                  <th>版本</th>
+                  <th>动作</th>
+                  <th>冠军</th>
+                  <th>球位</th>
+                  <th>方向</th>
+                </tr>
+              </thead>
+              <tbody id="tasks-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="threshold-panel" class="panel" aria-labelledby="threshold-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Signal policy</p>
+              <h2 id="threshold-title">门槛策略</h2>
+            </div>
+            <span class="status-badge status-warning">必须先预览再启用</span>
+          </div>
+          <div class="two-column">
+            <form id="threshold-form" class="form-card">
+              <label>
+                作用范围
+                <select id="threshold-scope">
+                  <option value="GLOBAL">全局默认</option>
+                  <option value="DEVICE">指定设备</option>
+                </select>
+              </label>
+              <label id="threshold-device-wrap" hidden>
+                设备编号
+                <input id="threshold-device" placeholder="从用户详情复制设备编号">
+              </label>
+              <label>
+                最低用户等级
+                <select id="threshold-level">
+                  <option value="FORMAL">正式高手池</option>
+                  <option value="CORE">核心高手池</option>
+                  <option value="CANDIDATE">候选用户</option>
+                </select>
+              </label>
+              <label>
+                最低保守胜率（%）
+                <input id="threshold-win-rate" type="number" min="0" max="100" step="0.01" value="52.00" required>
+              </label>
+              <label>
+                最低保守单位回报率（%）
+                <input id="threshold-roi" type="number" min="-100" max="96" step="0.01" value="1.92" required>
+              </label>
+              <label>
+                最低可跟单率（%）
+                <input id="threshold-followable" type="number" min="0" max="100" step="0.01" value="80.00" required>
+              </label>
+              <label>
+                启用原因
+                <input id="threshold-reason" maxlength="500" placeholder="预览后启用时必须填写">
+              </label>
+              <div class="button-row">
+                <button id="threshold-preview" class="button button-secondary" type="button">预览 7 / 30 天</button>
+                <button id="threshold-activate" class="button button-primary" type="button" disabled>启用此版本</button>
+              </div>
+              <p id="threshold-message" class="form-message" role="status"></p>
+            </form>
+            <article class="form-card">
+              <p class="eyebrow">Walk-forward preview</p>
+              <h3>历史盲跟预览</h3>
+              <p class="muted">只使用每期开奖前已冻结的数据，不会把今天的冠军榜回套过去。</p>
+              <div class="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr><th>窗口</th><th>可执行信号</th><th>命中 / 未中</th><th>保守胜率</th><th>单位收益</th></tr>
+                  </thead>
+                  <tbody id="threshold-preview-body"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="authorization-panel" class="panel" aria-labelledby="authorization-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Licensing</p>
+              <h2 id="authorization-title">授权管理</h2>
+            </div>
+          </div>
+          <form id="authorization-form" class="form-card narrow-card">
+            <label>
+              授权用途
+              <select id="authorization-purpose">
+                <option value="REGISTER">注册新用户</option>
+                <option value="REBIND">更换绑定设备</option>
+              </select>
+            </label>
+            <label id="authorization-account-wrap" hidden>
+              目标用户编号
+              <input id="authorization-account" placeholder="更换设备时必须填写">
+            </label>
+            <label>
+              发放原因
+              <input id="authorization-reason" maxlength="500" required placeholder="必须填写，可供审计追溯">
+            </label>
+            <button id="authorization-generate" class="button button-primary" type="submit">生成一次性授权码</button>
+            <p class="muted">授权码只展示一次。关闭窗口后，后台不会再次返回明文。</p>
+            <p id="authorization-message" class="form-message" role="status"></p>
+          </form>
+        </section>
+
+        <section id="audit-panel" class="panel" aria-labelledby="audit-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Immutable audit</p>
+              <h2 id="audit-title">审计记录</h2>
+            </div>
+            <button id="audit-next" class="button button-secondary" type="button" hidden>下一页</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>时间</th><th>动作</th><th>对象</th><th>原因</th><th>请求编号</th></tr>
+              </thead>
+              <tbody id="audit-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <dialog id="authorization-code-dialog" class="code-dialog">
+      <form method="dialog">
+        <p class="eyebrow">One-time code</p>
+        <h2>一次性授权码</h2>
+        <p>请立即交给对应用户。关闭后无法再次查看。</p>
+        <output id="authorization-code-value" class="code-value"></output>
+        <div class="button-row end">
+          <button id="copy-code-button" class="button button-secondary" type="button">复制授权码</button>
+          <button id="close-code-button" class="button button-primary" value="close">我已保存，关闭</button>
+        </div>
+      </form>
+    </dialog>
+
+    <template id="empty-row-template">
+      <tr><td class="empty-cell" colspan="9">暂无数据</td></tr>
+    </template>
+  </body>
+</html>

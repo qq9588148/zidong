@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 
 from champion_follow.db import open_pool
 from champion_follow.main import configure_core_services, register_core_routers
 from fastapi import FastAPI
+from fastapi.responses import FileResponse, RedirectResponse
 
 from .api.admin import router as admin_router
 from .api.auth import router as auth_router
@@ -24,6 +26,18 @@ from .services.reports import ReportService
 from .services.sessions import SessionService
 from .services.task_hub import TaskHub
 from .services.thresholds import ThresholdService
+
+
+ADMIN_STATIC_DIR = Path(__file__).resolve().parents[2] / "static" / "admin"
+ADMIN_SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; "
+        "img-src 'self' data:; connect-src 'self' wss:"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
 
 
 def _core_database_url(database_url: str) -> str:
@@ -84,6 +98,38 @@ def configure_auth_services(
     )
 
 
+def register_admin_static(app: FastAPI) -> None:
+    @app.get("/admin", include_in_schema=False)
+    async def admin_redirect():
+        return RedirectResponse(
+            url="/admin/", status_code=307, headers=ADMIN_SECURITY_HEADERS
+        )
+
+    @app.get("/admin/", include_in_schema=False)
+    async def admin_index():
+        return FileResponse(
+            ADMIN_STATIC_DIR / "index.html",
+            media_type="text/html; charset=utf-8",
+            headers=ADMIN_SECURITY_HEADERS,
+        )
+
+    @app.get("/admin/app.js", include_in_schema=False)
+    async def admin_script():
+        return FileResponse(
+            ADMIN_STATIC_DIR / "app.js",
+            media_type="text/javascript; charset=utf-8",
+            headers=ADMIN_SECURITY_HEADERS,
+        )
+
+    @app.get("/admin/style.css", include_in_schema=False)
+    async def admin_style():
+        return FileResponse(
+            ADMIN_STATIC_DIR / "style.css",
+            media_type="text/css; charset=utf-8",
+            headers=ADMIN_SECURITY_HEADERS,
+        )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     resolved = settings or Settings()
 
@@ -123,4 +169,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_router)
     app.include_router(device_ws_router)
     app.include_router(device_events_router)
+    register_admin_static(app)
     return app
