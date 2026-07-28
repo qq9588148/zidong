@@ -76,11 +76,12 @@ function normalizedItems(payload: UnknownRecord): Array<{
 export async function createFfcNormalizer(
   namespaceKey: Uint8Array,
   now: () => number = Date.now,
+  cryptoApi: Crypto = globalThis.crypto,
 ): Promise<(message: unknown, source: Source) => Promise<CapturedEvent[]>> {
   const keyBytes = Uint8Array.from(namespaceKey);
   let key: CryptoKey;
   try {
-    key = await globalThis.crypto.subtle.importKey(
+    key = await cryptoApi.subtle.importKey(
       "raw",
       keyBytes,
       { name: "HMAC", hash: "SHA-256" },
@@ -93,7 +94,7 @@ export async function createFfcNormalizer(
   const encoder = new TextEncoder();
   const digest = async (domain: string, value: string): Promise<string> =>
     hex(
-      await globalThis.crypto.subtle.sign(
+      await cryptoApi.subtle.sign(
         "HMAC",
         key,
         encoder.encode(`${domain}|${value}`),

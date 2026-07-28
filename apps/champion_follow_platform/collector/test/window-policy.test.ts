@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   COLLECTOR_PARTITION,
   collectorWebPreferences,
+  configureCollectorSession,
   denyPermissionRequest,
   denyWindowOpen,
   installCollectorWindowPolicy,
+  loadPlatformUntilAccepted,
   navigationGuard,
   sameOriginNavigation,
 } from "../src/window-policy.js";
@@ -74,5 +76,41 @@ describe("collector Electron window policy", () => {
     );
 
     expect(events).toEqual(["will-navigate", "will-redirect"]);
+  });
+
+  it("forces the persistent collector session to connect directly", async () => {
+    const fakeSession = {
+      setUserAgent: vi.fn(),
+      setPermissionCheckHandler: vi.fn(),
+      on: vi.fn(),
+      setProxy: vi.fn(async () => undefined),
+    };
+
+    await configureCollectorSession(fakeSession as never, "142.0.7444.175");
+
+    expect(fakeSession.setProxy).toHaveBeenCalledWith({ mode: "direct" });
+    expect(fakeSession.setUserAgent).toHaveBeenCalledWith(
+      expect.stringContaining("Chrome/142.0.7444.175"),
+      "zh-CN,zh;q=0.9,en;q=0.8",
+    );
+  });
+
+  it("keeps retrying a transient initial page failure without exiting", async () => {
+    let attempts = 0;
+    let waits = 0;
+    const loaded = await loadPlatformUntilAccepted(
+      async () => {
+        attempts += 1;
+        if (attempts < 3) throw new Error("ERR_CONNECTION_RESET");
+      },
+      () => true,
+      async () => {
+        waits += 1;
+      },
+    );
+
+    expect(loaded).toBe(true);
+    expect(attempts).toBe(3);
+    expect(waits).toBe(2);
   });
 });

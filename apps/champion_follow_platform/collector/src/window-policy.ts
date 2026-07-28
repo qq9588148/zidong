@@ -1,5 +1,6 @@
 import type { Session, WebContents } from "electron";
 
+const configuredSessions = new WeakMap<Session, Promise<void>>();
 
 export const COLLECTOR_PARTITION =
   "persist:champion-follow-main-collector-v1" as const;
@@ -14,6 +15,52 @@ export function collectorWebPreferences(preload: string) {
     webSecurity: true,
     allowRunningInsecureContent: false,
   } as const;
+}
+
+export function collectorUserAgent(chromiumVersion: string): string {
+  if (!/^[0-9]+(?:\.[0-9]+){1,3}$/.test(chromiumVersion)) {
+    throw new Error("collector_chromium_version_invalid");
+  }
+  return [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "AppleWebKit/537.36 (KHTML, like Gecko)",
+    `Chrome/${chromiumVersion}`,
+    "Safari/537.36",
+  ].join(" ");
+}
+
+export function configureCollectorSession(
+  collectorSession: Session,
+  chromiumVersion: string = process.versions.chrome,
+): Promise<void> {
+  const existing = configuredSessions.get(collectorSession);
+  if (existing) return existing;
+  collectorSession.setUserAgent(
+    collectorUserAgent(chromiumVersion),
+    "zh-CN,zh;q=0.9,en;q=0.8",
+  );
+  collectorSession.setPermissionCheckHandler(() => false);
+  collectorSession.on("will-download", (event) => event.preventDefault());
+  const configured = collectorSession.setProxy({ mode: "direct" });
+  configuredSessions.set(collectorSession, configured);
+  return configured;
+}
+
+export async function loadPlatformUntilAccepted(
+  load: () => Promise<void>,
+  shouldContinue: () => boolean,
+  waitForRetry: () => Promise<void>,
+): Promise<boolean> {
+  while (shouldContinue()) {
+    try {
+      await load();
+      return true;
+    } catch {
+      if (!shouldContinue()) return false;
+      await waitForRetry();
+    }
+  }
+  return false;
 }
 
 export function sameOriginNavigation(

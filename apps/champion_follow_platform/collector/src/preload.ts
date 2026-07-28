@@ -5,8 +5,10 @@ import {
   chunkCaptureEvents,
   CAPTURE_MESSAGE_LIMIT,
   createFifoDispatcher,
+  isSecureCollectorPage,
 } from "./capture-pipeline.js";
 import { capturedEventSchema, type CapturedEvent } from "./contracts.js";
+import { identityFromWire } from "./identity-wire.js";
 
 const MARKER = "champion-follow-public-room-v1";
 
@@ -47,7 +49,7 @@ async function gapForMessage(
       ? rawSourceMs
       : Date.now();
   const eventKey = hex(
-    await globalThis.crypto.subtle.digest(
+    await window.crypto.subtle.digest(
       "SHA-256",
       new TextEncoder().encode(
         `decrypt_failure|${issue}|${sourceMs}|${index}`,
@@ -68,13 +70,13 @@ async function gapForMessage(
 }
 
 async function start(): Promise<void> {
+  if (!isSecureCollectorPage(location.href)) return;
   let temporaryKey: Uint8Array;
   try {
     const value: unknown = await ipcRenderer.invoke("collector:identity");
-    if (!(value instanceof Uint8Array)) throw new Error("identity_key_invalid");
-    temporaryKey = Uint8Array.from(value);
+    temporaryKey = identityFromWire(value);
   } catch {
-    ipcRenderer.send("collector:unsafe-state", "issue_uncertain");
+    ipcRenderer.send("collector:unsafe-state", "identity_load_failed");
     return;
   }
 
@@ -83,19 +85,23 @@ async function start(): Promise<void> {
     if (temporaryKey.length !== 32) {
       throw new Error("identity_key_invalid");
     }
-    normalize = await createFfcNormalizer(temporaryKey);
+    normalize = await createFfcNormalizer(
+      temporaryKey,
+      Date.now,
+      window.crypto,
+    );
   } catch {
-    ipcRenderer.send("collector:unsafe-state", "issue_uncertain");
+    ipcRenderer.send("collector:unsafe-state", "normalizer_init_failed");
     return;
   } finally {
     temporaryKey.fill(0);
   }
 
   let failed = false;
-  const failClosed = (): void => {
+  const failClosed = (reason = "page_message_invalid"): void => {
     if (failed) return;
     failed = true;
-    ipcRenderer.send("collector:unsafe-state", "issue_uncertain");
+    ipcRenderer.send("collector:unsafe-state", reason);
   };
 
   async function handleMessage(event: MessageEvent): Promise<void> {
@@ -124,7 +130,7 @@ async function start(): Promise<void> {
         countdownMs < 0 ||
         (phase !== "BETTING" && phase !== "CLOSED" && phase !== "UNKNOWN")
       ) {
-        failClosed();
+        failClosed("page_state_invalid");
         return;
       }
       await ipcRenderer.invoke("collector:state", {
@@ -145,7 +151,7 @@ async function start(): Promise<void> {
       !Array.isArray(messages) ||
       messages.length > CAPTURE_MESSAGE_LIMIT
     ) {
-      failClosed();
+      failClosed("page_message_invalid");
       return;
     }
 
@@ -158,7 +164,7 @@ async function start(): Promise<void> {
           !Number.isSafeInteger(value) ||
           value < 0
         ) {
-          failClosed();
+          failClosed("history_time_invalid");
           return;
         }
         historySourceTimes.push(value);
@@ -172,7 +178,7 @@ async function start(): Promise<void> {
       } catch {
         const gap = await gapForMessage(raw, source, index);
         if (gap === null) {
-          failClosed();
+          failClosed("decrypt_failure_unattributed");
           return;
         }
         strictEvents.push(gap);
@@ -183,7 +189,7 @@ async function start(): Promise<void> {
         typeof requestId !== "string" ||
         !/^history-[1-9]\d{0,9}$/.test(requestId)
       ) {
-        failClosed();
+        failClosed("history_request_invalid");
         return;
       }
       const chunks = chunkCaptureEvents(strictEvents);
@@ -207,7 +213,10 @@ async function start(): Promise<void> {
     }
   }
 
-  const dispatch = createFifoDispatcher(handleMessage, failClosed);
+  const dispatch = createFifoDispatcher(
+    handleMessage,
+    () => failClosed("page_dispatch_failed"),
+  );
   window.addEventListener("message", (event) => {
     void dispatch(event);
   });

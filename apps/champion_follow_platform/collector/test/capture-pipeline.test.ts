@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   chunkCaptureEvents,
   createFifoDispatcher,
+  isSecureCollectorPage,
 } from "../src/capture-pipeline.js";
 
 describe("preload capture pipeline", () => {
@@ -41,5 +42,12 @@ describe("preload capture pipeline", () => {
       1_000, 1_000, 1,
     ]);
     expect(chunkCaptureEvents([])).toEqual([]);
+  });
+
+  it("initializes capture only inside a real HTTPS page", () => {
+    expect(isSecureCollectorPage("https://ng1z.com/")).toBe(true);
+    expect(isSecureCollectorPage("chrome-error://chromewebdata/")).toBe(false);
+    expect(isSecureCollectorPage("about:blank")).toBe(false);
+    expect(isSecureCollectorPage("not a url")).toBe(false);
   });
 });

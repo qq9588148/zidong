@@ -1,10 +1,11 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   safeStorage,
   type IpcMainEvent,
@@ -24,6 +25,7 @@ import {
   type CollectorCredential,
 } from "./credential-store.js";
 import { IdentityStore } from "./identity-store.js";
+import { identityToWire } from "./identity-wire.js";
 import {
   HistoryBoundaryTracker,
   HistoryPageChunkAssembler,
@@ -31,6 +33,7 @@ import {
 } from "./history-page.js";
 import { AppendOnlyJournal } from "./journal.js";
 import { NavigationRecoveryCoordinator } from "./navigation-recovery.js";
+import { ignoreBrokenPipe } from "./process-output.js";
 import {
   CollectorRuntime,
   bootstrapCollector,
@@ -43,7 +46,9 @@ import {
 } from "./server-api.js";
 import {
   collectorWebPreferences,
+  configureCollectorSession,
   installCollectorWindowPolicy,
+  loadPlatformUntilAccepted,
   sameOriginNavigation,
 } from "./window-policy.js";
 
@@ -54,6 +59,9 @@ const pageHookPath = join(distRoot, "page-hook.js");
 type BootstrapCredential = CollectorCredential | {
   readonly collector_id: "collector-main-local";
 };
+
+ignoreBrokenPipe(process.stdout);
+ignoreBrokenPipe(process.stderr);
 
 function strictCaptureBatch(value: unknown): CapturedEvent[] {
   if (
@@ -120,6 +128,20 @@ async function run(): Promise<void> {
         reject(error: Error): void;
       }
     | null = null;
+
+  function recordCaptureStatus(status: string): void {
+    void writeFile(join(runtimeRoot, "capture-status.txt"), `${status}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    }).catch(() => undefined);
+  }
+
+  function recordCaptureStop(reason: string): void {
+    captureStopped = true;
+    recordCaptureStatus(reason);
+  }
+
+  recordCaptureStatus("starting");
 
   app.on("second-instance", () => {
     if (!collectorWindow || collectorWindow.isDestroyed()) return;
@@ -289,7 +311,7 @@ async function run(): Promise<void> {
       void task.catch(() => {
         if (controller.signal.aborted) return;
         runtime.markCaptureUnhealthy();
-        captureStopped = true;
+        recordCaptureStop("collector_loop_failed");
         controller.abort();
       });
     }
@@ -344,7 +366,7 @@ async function run(): Promise<void> {
           return;
         }
         collectorRuntime?.markCaptureUnhealthy();
-        captureStopped = true;
+        recordCaptureStop("history_recovery_failed");
         void stopCollectorLoops();
       })
       .finally(() => {
@@ -413,8 +435,8 @@ async function run(): Promise<void> {
         collectorId,
         journal,
         server,
-        stopCapture() {
-          captureStopped = true;
+        stopCapture(reason) {
+          recordCaptureStop(reason);
         },
       });
       await collectorRuntime.reconcileSession();
@@ -449,6 +471,8 @@ async function run(): Promise<void> {
       };
       statusTimer = setInterval(updateTitle, 1_000);
       updateTitle();
+      recordCaptureStatus("waiting_for_page");
+      await configureCollectorSession(window.webContents.session);
       installCollectorWindowPolicy(
         window.webContents.session,
         window.webContents,
@@ -485,7 +509,7 @@ async function run(): Promise<void> {
         },
         failClosed() {
           collectorRuntime?.markCaptureUnhealthy();
-          captureStopped = true;
+          recordCaptureStop("navigation_recovery_failed");
           loopController?.abort();
           historyController?.abort();
         },
@@ -501,7 +525,7 @@ async function run(): Promise<void> {
         if (!validSender(event) || !namespaceKey) {
           throw new Error("collector_ipc_rejected");
         }
-        return Buffer.from(namespaceKey);
+        return identityToWire(namespaceKey);
       });
       ipcMain.handle("collector:append", async (event, value: unknown) => {
         if (!validSender(event)) throw new Error("collector_ipc_rejected");
@@ -544,6 +568,7 @@ async function run(): Promise<void> {
           countdownMs,
           observedAtMs,
         });
+        recordCaptureStatus("capturing");
         if (phase === "BETTING") startHistoryRecovery(generation);
         return sequence;
       });
@@ -570,10 +595,14 @@ async function run(): Promise<void> {
         pending.resolve(page);
         return journal.lastSeq;
       });
-      ipcMain.on("collector:unsafe-state", (event) => {
+      ipcMain.on("collector:unsafe-state", (event, reason: unknown) => {
         if (!validSender(event)) return;
         collectorRuntime?.markCaptureUnhealthy();
-        captureStopped = true;
+        const safeReason = typeof reason === "string" &&
+            /^[a-z0-9_]{1,64}$/.test(reason)
+          ? reason
+          : "page_state_unsafe";
+        recordCaptureStop(safeReason);
       });
       ipcMain.on("collector:history-error", (event, requestId: unknown) => {
         if (
@@ -588,7 +617,11 @@ async function run(): Promise<void> {
         pending.reject(new Error("collector_history_read_failed"));
       });
 
-      await window.loadURL(platformUrl);
+      void loadPlatformUntilAccepted(
+        () => window.loadURL(platformUrl),
+        () => !window.isDestroyed() && !cleaned,
+        () => new Promise((resolve) => setTimeout(resolve, 1_000)),
+      );
       return window;
     },
     startLoops(_server, window) {
@@ -612,11 +645,33 @@ async function run(): Promise<void> {
   });
 }
 
-void run().catch((error: unknown) => {
+void run().catch(async (error: unknown) => {
   const code =
     error instanceof Error && error.message === "collector_config_invalid"
       ? error.message
       : startupErrorCode(error);
-  process.stderr.write(`${code}\n`);
+  try {
+    const root = join(app.getPath("userData"), "main-collector-v1");
+    await mkdir(root, { recursive: true, mode: 0o700 });
+    await writeFile(join(root, "startup-error.txt"), `${code}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+  } catch {
+    // The visible error still reports the safe startup code.
+  }
+  try {
+    dialog.showErrorBox(
+      "NG 主采集器未能启动",
+      `错误编号：${code}\n登录资料和采集账本没有被删除。`,
+    );
+  } catch {
+    // Electron may already be shutting down.
+  }
+  try {
+    process.stderr.write(`${code}\n`);
+  } catch {
+    // Packaged GUI launches may not have an attached output pipe.
+  }
   app.exit(1);
 });
