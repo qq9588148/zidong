@@ -47,10 +47,10 @@ export function readBtcffcPageState(
       const candidate = object(rawCandidate);
       if (!candidate) continue;
       const model = String(
-        candidate.model ??
-          store.model ??
-          store.gameModel ??
-          parameters?.model ??
+        candidate.model ||
+          store.model ||
+          store.gameModel ||
+          parameters?.model ||
           "",
       );
       const issue = String(candidate.serial ?? "");

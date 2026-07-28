@@ -42,6 +42,26 @@ describe("public room hook", () => {
     });
   });
 
+  it("reads the current NG store when an empty legacy model masks paramData", () => {
+    expect(
+      readBtcffcPageState([
+        {
+          model: "",
+          paramData: { model: "Btcffc" },
+          game28Info: {
+            serial: "2607280001",
+            countdown: "17.5",
+            process: "1",
+          },
+        },
+      ]),
+    ).toEqual({
+      issue: "2607280001",
+      countdownMs: 17_500,
+      phase: "BETTING",
+    });
+  });
+
   it("wraps each active room once and restores the replaced room", async () => {
     const emitted: unknown[] = [];
     let firstCalls = 0;
@@ -123,5 +143,30 @@ describe("public room hook", () => {
     expect(() => room.options.onmsgs([1])).toThrow(failure);
     await Promise.resolve();
     expect(emitted).toHaveLength(1);
+  });
+
+  it("emits the message after the SDK callback has completed decoding it", async () => {
+    const emitted: Array<{ messages: unknown[] }> = [];
+    const message: { text: unknown } = { text: "encrypted" };
+    const room = {
+      protocol: {
+        options: {
+          onmsgs(messages: unknown[]) {
+            (messages[0] as { text: unknown }).text = {
+              ext: { isRobot: "1", ext: { model: "Btcffc" } },
+            };
+          },
+        },
+      },
+    };
+
+    installRoomHook(room, (payload) => emitted.push(payload));
+    room.protocol.options.onmsgs([message]);
+    await Promise.resolve();
+
+    expect(emitted).toEqual([{ messages: [message], origin: "realtime" }]);
+    expect(message.text).toEqual({
+      ext: { isRobot: "1", ext: { model: "Btcffc" } },
+    });
   });
 });

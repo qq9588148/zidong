@@ -434,6 +434,20 @@ export class CollectorRuntime {
     }
   }
 
+  async startLiveCollectionWithoutHistory(): Promise<void> {
+    const remote = this.remoteSession;
+    if (!remote) throw safeError("collector_session_missing");
+    if (
+      !remote.namespace_empty ||
+      remote.history_anchor_event_key !== null ||
+      !this.currentBoundary
+    ) {
+      throw safeError("collector_history_anchor_missing");
+    }
+    if (!this.historyRecoveryOpen()) return;
+    await this.markMissingHistoryAnchor(this.currentBoundary);
+  }
+
   private serialized<T>(operation: () => Promise<T>): Promise<T> {
     const next = this.ingestTail.then(operation, operation);
     this.ingestTail = next.then(

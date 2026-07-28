@@ -12,6 +12,11 @@ import {
 } from "electron";
 
 import { CAPTURE_EVENT_CHUNK_LIMIT } from "./capture-pipeline.js";
+import {
+  LocalCollectorServer,
+  collectorWindowTitle,
+  resolveCollectorConfig,
+} from "./collector-mode.js";
 import { capturedEventSchema, type CapturedEvent } from "./contracts.js";
 import {
   CollectorCredentialStore,
@@ -32,7 +37,10 @@ import {
   startupErrorCode,
   type HistoryPage,
 } from "./runtime.js";
-import { HttpCollectorServer } from "./server-api.js";
+import {
+  HttpCollectorServer,
+  type CollectorServerPort,
+} from "./server-api.js";
 import {
   collectorWebPreferences,
   installCollectorWindowPolicy,
@@ -43,16 +51,9 @@ const distRoot = dirname(fileURLToPath(import.meta.url));
 const preloadPath = join(distRoot, "preload.cjs");
 const pageHookPath = join(distRoot, "page-hook.js");
 
-function configuredHttps(name: string): string {
-  const value = process.env[name];
-  try {
-    const parsed = new URL(value ?? "");
-    if (parsed.protocol !== "https:") throw new Error();
-    return parsed.toString();
-  } catch {
-    throw new Error("collector_config_invalid");
-  }
-}
+type BootstrapCredential = CollectorCredential | {
+  readonly collector_id: "collector-main-local";
+};
 
 function strictCaptureBatch(value: unknown): CapturedEvent[] {
   if (
@@ -70,10 +71,14 @@ function strictCaptureBatch(value: unknown): CapturedEvent[] {
 }
 
 async function run(): Promise<void> {
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+  }
   await app.whenReady();
 
-  const platformUrl = configuredHttps("CHAMPION_PLATFORM_URL");
-  const serverUrl = configuredHttps("CHAMPION_COLLECTOR_SERVER_URL");
+  const config = resolveCollectorConfig(process.env);
+  const platformUrl = config.platformUrl;
   const platformOrigin = new URL(platformUrl).origin;
   const runtimeRoot = join(app.getPath("userData"), "main-collector-v1");
   await mkdir(runtimeRoot, { recursive: true, mode: 0o700 });
@@ -93,11 +98,13 @@ async function run(): Promise<void> {
   let collectorId: string | null = null;
   let collectorRuntime: CollectorRuntime | null = null;
   let collectorWindow: BrowserWindow | null = null;
+  let collectorWindowMayClose = false;
   let loopController: AbortController | null = null;
   let loopTasks: Promise<void>[] = [];
   let historyController: AbortController | null = null;
   let historyRecoveryTask: Promise<void> | null = null;
   let navigationRecovery: NavigationRecoveryCoordinator | null = null;
+  let statusTimer: ReturnType<typeof setInterval> | null = null;
   let captureStopped = false;
   let historyRequestNumber = 0;
   let historyCursorMs = Date.now() + 1;
@@ -113,6 +120,12 @@ async function run(): Promise<void> {
         reject(error: Error): void;
       }
     | null = null;
+
+  app.on("second-instance", () => {
+    if (!collectorWindow || collectorWindow.isDestroyed()) return;
+    collectorWindow.show();
+    collectorWindow.focus();
+  });
 
   function validSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
     const frameUrl = event.senderFrame?.url ?? "";
@@ -261,6 +274,7 @@ async function run(): Promise<void> {
   }
 
   function startCollectorLoops(): void {
+    if (config.mode === "local") return;
     if (captureStopped || loopController) return;
     const runtime = requireRuntime();
     const controller = new AbortController();
@@ -313,9 +327,12 @@ async function run(): Promise<void> {
     historyRecoveryStarted = true;
     const controller = new AbortController();
     historyController = controller;
-    const task = requireRuntime().recoverHistory(() =>
-      readHistoryPage(generation, controller.signal),
-    );
+    const runtime = requireRuntime();
+    const task = config.mode === "local"
+      ? runtime.startLiveCollectionWithoutHistory()
+      : runtime.recoverHistory(() =>
+          readHistoryPage(generation, controller.signal),
+        );
     historyRecoveryTask = task;
     void task
       .then(() => {
@@ -340,6 +357,8 @@ async function run(): Promise<void> {
     if (cleaned) return;
     cleaned = true;
     captureStopped = true;
+    if (statusTimer !== null) clearInterval(statusTimer);
+    statusTimer = null;
     await navigationRecovery?.stop();
     await stopHistoryRecovery();
     await stopCollectorLoops();
@@ -356,14 +375,19 @@ async function run(): Promise<void> {
   }
 
   const result = await bootstrapCollector<
-    CollectorCredential,
-    HttpCollectorServer,
+    BootstrapCredential,
+    CollectorServerPort,
     BrowserWindow
   >({
     async loadIdentity() {
       namespaceKey = await identityStore.loadOrCreate();
     },
     async loadCredential() {
+      if (config.mode === "local") {
+        const credential = { collector_id: "collector-main-local" } as const;
+        collectorId = credential.collector_id;
+        return credential;
+      }
       let credential: CollectorCredential;
       if (importMode.kind === "file") {
         credential = await credentialStore.importFromFile(importMode.path);
@@ -376,7 +400,9 @@ async function run(): Promise<void> {
       return credential;
     },
     createServer(credential) {
-      return new HttpCollectorServer(serverUrl, credential.bearer);
+      if (config.mode === "local") return new LocalCollectorServer(journal);
+      if (!("bearer" in credential)) throw new Error("collector_config_invalid");
+      return new HttpCollectorServer(config.serverUrl!, credential.bearer);
     },
     async openJournal() {
       await journal.start();
@@ -396,10 +422,33 @@ async function run(): Promise<void> {
     async openWindow() {
       const pageHook = await readFile(pageHookPath, "utf8");
       const window = new BrowserWindow({
+        width: 460,
+        height: 820,
+        minWidth: 390,
+        minHeight: 680,
         show: true,
+        autoHideMenuBar: true,
+        backgroundColor: "#0a0f1a",
+        title: collectorWindowTitle({ healthy: true, issue: null, saved: 0 }),
         webPreferences: collectorWebPreferences(preloadPath),
       });
       collectorWindow = window;
+      window.on("close", (event) => {
+        if (collectorWindowMayClose) return;
+        event.preventDefault();
+        window.hide();
+      });
+      const updateTitle = (): void => {
+        if (window.isDestroyed()) return;
+        const heartbeat = collectorRuntime?.currentHeartbeat();
+        window.setTitle(collectorWindowTitle({
+          healthy: captureStopped ? false : (heartbeat?.capture_healthy ?? true),
+          issue: heartbeat?.issue ?? null,
+          saved: journal.lastSeq,
+        }));
+      };
+      statusTimer = setInterval(updateTitle, 1_000);
+      updateTitle();
       installCollectorWindowPolicy(
         window.webContents.session,
         window.webContents,
@@ -544,7 +593,9 @@ async function run(): Promise<void> {
     },
     startLoops(_server, window) {
       startCollectorLoops();
-      window.on("closed", () => app.quit());
+      window.on("closed", () => {
+        if (collectorWindow === window) collectorWindow = null;
+      });
     },
     cleanup: cleanupRuntime,
   });
@@ -556,6 +607,7 @@ async function run(): Promise<void> {
     if (closing) return;
     event.preventDefault();
     closing = true;
+    collectorWindowMayClose = true;
     void cleanupRuntime().finally(() => app.exit(0));
   });
 }

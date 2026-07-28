@@ -429,6 +429,31 @@ describe("CollectorRuntime recovery", () => {
     expect(collector.historyRecoveryOpen()).toBe(false);
   });
 
+  it("starts local live collection by marking the partial opening issue incomplete", async () => {
+    const journal = new MemoryJournal();
+    const collector = runtime(journal, server(session()));
+    await collector.reconcileSession();
+    await collector.observePageState({
+      issue: ISSUE,
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 3_000,
+    });
+
+    await collector.startLiveCollectionWithoutHistory();
+
+    expect(collector.completeness(ISSUE).reasons).toContain(
+      "history_anchor_missing",
+    );
+    expect(
+      journal.rows.some(
+        (row) =>
+          row.event.kind === "CAPTURE_GAP" &&
+          row.event.reason === "history_anchor_missing",
+      ),
+    ).toBe(true);
+  });
+
   it("keeps the issue incomplete when close arrives before a delayed history anchor", async () => {
     const anchor = event("BET", { source: "history" });
     const journal = new MemoryJournal();
