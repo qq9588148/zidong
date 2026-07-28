@@ -14,14 +14,17 @@ type ChampionRuntimeState = {
 
 type ChampionPlatformPageProbe = {
   gameVisible: boolean;
+  currentPeriodId: string | null;
+  countdownMs: number | null;
   periodCandidateCount: number;
   countdownCandidateCount: number;
-  odds196Count: number;
   directionTextCounts: Record<
     "BIG" | "SMALL" | "ODD" | "EVEN" | "PRIME" | "COMPOSITE",
     number
   >;
   balanceLabelVisible: boolean;
+  balanceValueReadable: boolean;
+  publicBetCommandCount: number;
   stakeInputCount: number;
   betControlCount: number;
   contractReady: boolean;

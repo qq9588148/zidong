@@ -185,4 +185,58 @@ describe("App registration state", () => {
     expect(dialog).toHaveTextContent("账号注册和本机绑定已完成");
     expect(await screen.findByText("已认证")).toBeVisible();
   });
+
+  it("shows read-only NG period, countdown and safe balance recognition", async () => {
+    window.championFollow = {
+      getState: vi.fn(async () => ({
+        ...baseState,
+        connection: {
+          status: "ONLINE" as const,
+          registered: true,
+          username: "client-user",
+          deviceLabel: "90abcdef",
+          errorCode: null,
+        },
+      })),
+      register: vi.fn(),
+      login: vi.fn(),
+      setAutoBet: vi.fn(),
+      getPlatformWindowState: vi.fn(async () => ({
+        ...emptyPlatformState,
+        open: true,
+        probe: {
+          gameVisible: true,
+          currentPeriodId: "2607290008",
+          countdownMs: 65_000,
+          periodCandidateCount: 2,
+          countdownCandidateCount: 1,
+          directionTextCounts: {
+            BIG: 1,
+            SMALL: 0,
+            ODD: 0,
+            EVEN: 1,
+            PRIME: 0,
+            COMPOSITE: 0,
+          },
+          balanceLabelVisible: true,
+          balanceValueReadable: true,
+          publicBetCommandCount: 2,
+          stakeInputCount: 0,
+          betControlCount: 0,
+          contractReady: false,
+        },
+      })),
+      openPlatformLogin: vi.fn(),
+      quitApp: vi.fn(),
+    };
+
+    render(<App />);
+
+    expect(await screen.findByText(/当前期号：2607290008/)).toBeVisible();
+    expect(screen.getByText(/倒计时：01:05/)).toBeVisible();
+    expect(screen.getByText(/余额：已识别/)).toBeVisible();
+    expect(screen.getByText(/赔率：固定 1\.96/)).toBeVisible();
+    expect(screen.getByText(/公开下注：2 条/)).toBeVisible();
+    expect(screen.getByText(/不会下注/)).toBeVisible();
+  });
 });

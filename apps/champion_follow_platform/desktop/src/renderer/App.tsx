@@ -185,13 +185,16 @@ export function App() {
   };
 
   const detectedContractParts = platformProbe === null ? 0 : [
-    platformProbe.periodCandidateCount > 0,
-    platformProbe.countdownCandidateCount > 0,
-    platformProbe.odds196Count >= 6,
+    platformProbe.currentPeriodId !== null,
+    platformProbe.countdownMs !== null,
     Object.values(platformProbe.directionTextCounts).every((count) => count > 0),
-    platformProbe.balanceLabelVisible,
+    platformProbe.balanceLabelVisible && platformProbe.balanceValueReadable,
     platformProbe.stakeInputCount > 0 && platformProbe.betControlCount > 0,
   ].filter(Boolean).length;
+  const platformCountdown = platformProbe?.countdownMs === null ||
+    platformProbe?.countdownMs === undefined
+    ? "未识别"
+    : formatCountdown(platformProbe.countdownMs);
 
   return (
     <main className="app-shell">
@@ -326,7 +329,16 @@ export function App() {
           <p>
             页面合同：{platformProbe?.contractReady
               ? "已完整识别（只读）"
-              : `已识别 ${detectedContractParts}/6 项（不会下注）`}
+              : `已识别 ${detectedContractParts}/5 项（不会下注）`}
+          </p>
+          <p>
+            当前期号：{platformProbe?.currentPeriodId ?? "未识别"}
+            {" · "}倒计时：{platformCountdown}
+          </p>
+          <p>
+            赔率：固定 1.96
+            {" · "}余额：{platformProbe?.balanceValueReadable ? "已识别" : "未识别"}
+            {" · "}公开下注：{platformProbe?.publicBetCommandCount ?? 0} 条
           </p>
           <p>
             登录态保存：{platformSession.snapshotPresent
@@ -386,4 +398,14 @@ export function App() {
       )}
     </main>
   );
+}
+
+function formatCountdown(milliseconds: number): string {
+  const seconds = Math.floor(milliseconds / 1_000);
+  const hours = Math.floor(seconds / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const remainder = seconds % 60;
+  return hours > 0
+    ? [hours, minutes, remainder].map((value) => String(value).padStart(2, "0")).join(":")
+    : [minutes, remainder].map((value) => String(value).padStart(2, "0")).join(":");
 }
