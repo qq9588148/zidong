@@ -24,6 +24,7 @@ from .services.device_allocator import DeviceAllocator
 from .services.device_ledger import DeviceLedgerService
 from .services.device_task_revisions import DeviceTaskRevisionService
 from .services.reports import ReportService
+from .services.platform_endpoints import PlatformEndpointService
 from .services.sessions import SessionService
 from .services.task_hub import TaskHub
 from .services.thresholds import ThresholdService
@@ -76,6 +77,9 @@ def configure_auth_services(
     )
     app.state.task_revision_service = DeviceTaskRevisionService(
         app.state.task_signer, resolved_clock
+    )
+    app.state.platform_endpoint_service = PlatformEndpointService(
+        app.state.task_signer, audit_writer, resolved_clock
     )
     app.state.task_hub = TaskHub()
     app.state.device_ledger = DeviceLedgerService(resolved_clock)

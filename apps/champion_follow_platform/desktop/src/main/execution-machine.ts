@@ -5,7 +5,13 @@ import type {
   SafePlatformAdapter,
 } from "./platform-adapter";
 
-export type ExecutionState = "SUBMITTING" | "CONFIRMED" | "REJECTED" | "UNKNOWN" | "CANCELED";
+export type ExecutionState =
+  | "SUBMITTING"
+  | "CONFIRMED"
+  | "SETTLED"
+  | "REJECTED"
+  | "UNKNOWN"
+  | "CANCELED";
 
 export type ExecutionRecord = {
   state: ExecutionState;

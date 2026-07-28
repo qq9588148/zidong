@@ -213,6 +213,10 @@ export function App() {
     }
   };
 
+  const toggleAutoBet = async () => {
+    setState(await window.championFollow.setAutoBet(state.autoBet !== "ON"));
+  };
+
   const quitApp = async () => {
     if (!window.confirm("完全退出后，平台可能要求重新登录。确定退出吗？")) return;
     await window.championFollow.quitApp();
@@ -273,10 +277,10 @@ export function App() {
           <strong className={platformOpen ? "active" : "muted"}>
             {platformOpen ? "已打开" : "未打开"}
           </strong>
-          <span>独立内置 Chromium 会话 · 直连模式</span>
+          <span>独立内置 Chromium 会话 · 本机代理兼容</span>
         </article>
         <article className="status-card safety">
-          <p>自动执行</p><strong>关闭</strong>
+          <p>自动执行</p><strong>{state.autoBet === "ON" ? "已开启" : "关闭"}</strong>
           <span>每次启动固定恢复为关闭</span>
         </article>
       </section>
@@ -360,7 +364,7 @@ export function App() {
         <div>
           <p className="section-label">NG 平台</p>
           <h3>手动登录平台</h3>
-          <p>当前入口 ng1z.com；后期可由已认证后台安全更新。账号、密码和验证码不会进入客户端日志。</p>
+          <p>入口由本机安全配置和已认证后台更新。账号、密码和验证码不会进入客户端日志。</p>
           <p>
             页面合同：{platformProbe?.contractReady
               ? "已完整识别（只读）"
@@ -395,12 +399,20 @@ export function App() {
 
       <section className="control-card">
         <div>
-          <p className="section-label">服务器信号 · 只读</p>
+          <p className="section-label">服务器信号 · 自动执行</p>
           <h3>{signalCopy.title}</h3>
           <p>{signalCopy.detail}</p>
         </div>
-        <button type="button" disabled aria-disabled="true">
-          仅展示 · 自动执行已关闭
+        <button
+          type="button"
+          onClick={() => void toggleAutoBet()}
+          disabled={state.autoBet !== "ON" && (
+            state.connection.status !== "ONLINE" ||
+            platformProbe?.contractReady !== true ||
+            state.signal.status !== "SYNCED"
+          )}
+        >
+          {state.autoBet === "ON" ? "关闭自动执行" : "开启自动执行"}
         </button>
       </section>
 

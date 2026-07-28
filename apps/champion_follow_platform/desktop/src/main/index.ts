@@ -6,13 +6,16 @@ import { DeviceAuthClient, JsonDeviceIdentityStore } from "./auth-client";
 import { registerClientIpc } from "./ipc-handlers";
 import { createNativeHelper } from "./native-helper-runtime";
 import { desktopPaths } from "./paths";
+import { DesktopExecutionRuntime } from "./execution-runtime";
 import { ReadonlySignalFeed } from "./signal-feed";
+import { TrustedTaskSigningKeys } from "./task-contract";
 import {
   allowPlatformWindowCloseForExit,
   getLatestPlatformPageProbe,
   getPlatformSessionPersistenceState,
   isPlatformWindowOpen,
   openNgPlatformWindow,
+  platformEndpointRegistry,
 } from "./platform-window";
 
 export { initialRuntimeState };
@@ -21,6 +24,7 @@ const DEFAULT_SERVER_BASE_URL = "https://101.37.172.66:8443";
 let mainWindow: BrowserWindow | null = null;
 let appIsQuitting = false;
 let signalFeed: ReadonlySignalFeed | null = null;
+let executionRuntime: DesktopExecutionRuntime | null = null;
 
 export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -97,13 +101,15 @@ if (process.env.VITEST !== "true" && app) {
     app.on("before-quit", () => {
       appIsQuitting = true;
       signalFeed?.stop();
+      executionRuntime?.stop();
       allowPlatformWindowCloseForExit();
     });
     app.on("second-instance", () => openMainWindow());
     app.whenReady().then(() => {
+      const helper = createNativeHelper();
       const authClient = new DeviceAuthClient({
         baseUrl: DEFAULT_SERVER_BASE_URL,
-        helper: createNativeHelper(),
+        helper,
         store: new JsonDeviceIdentityStore(
           join(desktopPaths().profile, "device-identity.json"),
         ),
@@ -113,11 +119,32 @@ if (process.env.VITEST !== "true" && app) {
         auth: authClient,
         periodId: () => getLatestPlatformPageProbe()?.currentPeriodId ?? null,
       });
-      const controller = new AppController(authClient, signalFeed);
+      let controller: AppController;
+      executionRuntime = new DesktopExecutionRuntime({
+        auth: authClient,
+        signals: signalFeed,
+        helper,
+        journalDirectory: desktopPaths().journal,
+        generation: () => controller.getState().generation,
+      });
+      controller = new AppController(authClient, signalFeed, executionRuntime);
       registerAppIpc(controller);
       openMainWindow();
       signalFeed.start();
-      void controller.initialize();
+      void controller.initialize().then(async () => {
+        try {
+          const keys = TrustedTaskSigningKeys.fromResponse(
+            await authClient.taskSigningKeys(),
+          );
+          platformEndpointRegistry.applySigned(
+            await authClient.platformEndpointConfig(),
+            keys,
+          );
+        } catch {
+          // A missing backend override keeps the built-in HTTPS endpoint.
+        }
+        openNgPlatformWindow();
+      });
       app.on("activate", () => openMainWindow());
     });
   }

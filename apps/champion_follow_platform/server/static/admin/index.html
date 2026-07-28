@@ -48,6 +48,7 @@
           <button class="nav-button" data-panel="champions-panel" type="button">冠军画像</button>
           <button class="nav-button" data-panel="tasks-panel" type="button">任务流水</button>
           <button class="nav-button" data-panel="threshold-panel" type="button">门槛策略</button>
+          <button class="nav-button" data-panel="platform-panel" type="button">平台地址</button>
           <button class="nav-button" data-panel="authorization-panel" type="button">授权管理</button>
           <button class="nav-button" data-panel="audit-panel" type="button">审计记录</button>
         </nav>
@@ -290,6 +291,29 @@
               </div>
             </article>
           </div>
+        </section>
+
+        <section id="platform-panel" class="panel" aria-labelledby="platform-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Platform endpoint</p>
+              <h2 id="platform-title">客户端默认平台地址</h2>
+            </div>
+            <span id="platform-version" class="status-badge">尚未下发</span>
+          </div>
+          <form id="platform-form" class="form-card narrow-card">
+            <label>
+              默认打开地址
+              <input id="platform-entry-url" type="url" maxlength="2048" value="https://ng1z.com/" required>
+            </label>
+            <label>
+              修改原因
+              <input id="platform-reason" maxlength="500" placeholder="必须填写，可供审计追溯" required>
+            </label>
+            <button id="platform-save" class="button button-primary" type="submit">保存并安全下发</button>
+            <p id="platform-message" class="form-message" role="status"></p>
+            <p class="muted">客户端只接受后台签名的 HTTPS 地址；更新后将在下次认证同步时生效。</p>
+          </form>
         </section>
 
         <section id="authorization-panel" class="panel" aria-labelledby="authorization-title" hidden>

@@ -20,6 +20,7 @@ async def test_admin_console_has_required_panels_and_security_headers(client) ->
         'id="users-panel"',
         'id="champions-panel"',
         'id="threshold-panel"',
+        'id="platform-panel"',
         'id="authorization-panel"',
         'id="audit-panel"',
         'id="global-stop"',

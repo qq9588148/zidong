@@ -33,6 +33,12 @@ export type DeviceIdentityMetadata = {
   username: string;
 };
 
+export type DeviceRuntimeIdentity = Readonly<{
+  deviceId: string;
+  localId: string;
+  bindingEpoch: number;
+}>;
+
 export interface DeviceIdentityStore {
   load(): Promise<DeviceIdentityMetadata | null>;
   save(value: DeviceIdentityMetadata): Promise<void>;
@@ -165,6 +171,14 @@ export class DeviceAuthClient {
 
   deviceId(): string | null {
     return this.identity?.deviceId ?? null;
+  }
+
+  runtimeIdentity(): DeviceRuntimeIdentity | null {
+    return this.identity === null ? null : {
+      deviceId: this.identity.deviceId,
+      localId: this.identity.localId,
+      bindingEpoch: 1,
+    };
   }
 
   async initialize(): Promise<void> {
@@ -330,6 +344,66 @@ export class DeviceAuthClient {
     if (!response.ok ||
         !response.headers.get("content-type")?.toLowerCase()
           .includes("application/json")) {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+  }
+
+  async deviceSync(): Promise<unknown> {
+    return this.authorizedJson("/v1/device/sync", { method: "GET" });
+  }
+
+  async platformEndpointConfig(): Promise<unknown> {
+    return this.authorizedJson("/api/v1/auth/platform-endpoint", { method: "GET" });
+  }
+
+  async sendClientEvent(bytes: Buffer): Promise<{ ack_seq: number }> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bytes.toString("utf8")) as unknown;
+    } catch {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+    const response = await this.authorizedJson("/v1/device/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed),
+    });
+    if (!isObject(response) || !Number.isSafeInteger(response.ack_seq) ||
+        (response.ack_seq as number) < 1) {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+    return { ack_seq: response.ack_seq as number };
+  }
+
+  private async authorizedJson(path: string, init: RequestInit): Promise<unknown> {
+    const accessToken = await this.accessToken();
+    let response: Response;
+    try {
+      response = await this.fetchImpl(new URL(path, this.baseUrl), {
+        ...init,
+        headers: {
+          "Accept": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+          ...(init.headers ?? {}),
+        },
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      throw new AuthClientError("SERVER_UNAVAILABLE");
+    }
+    if (!response.ok || !response.headers.get("content-type")?.toLowerCase()
+      .includes("application/json")) {
       throw new AuthClientError("SERVER_UNAVAILABLE");
     }
     const text = await response.text();

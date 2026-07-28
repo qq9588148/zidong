@@ -64,7 +64,7 @@ describe("App registration state", () => {
     expect(await screen.findByRole("button", { name: "注册并绑定本机" })).toBeVisible();
     expect(screen.getByLabelText("一次性授权码")).toBeVisible();
     expect(screen.getByRole("button", {
-      name: "仅展示 · 自动执行已关闭",
+      name: "开启自动执行",
     })).toBeDisabled();
   });
 
@@ -288,7 +288,7 @@ describe("App registration state", () => {
     expect(screen.getByText(/任务版本 4/)).toBeVisible();
     expect(screen.getByText(/信号版本 7/)).toBeVisible();
     expect(screen.getByRole("button", {
-      name: "仅展示 · 自动执行已关闭",
+      name: "开启自动执行",
     })).toBeDisabled();
     expect(document.body.textContent).not.toMatch(/actor_ref|signature|device_id/);
   });

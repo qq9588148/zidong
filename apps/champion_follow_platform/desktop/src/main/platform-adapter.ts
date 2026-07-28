@@ -16,7 +16,7 @@ export type FrozenOrder = {
   expectedOddsMicros: 1_960_000;
 };
 
-type RawConfirmation = {
+export type RawConfirmation = {
   status: "CONFIRMED";
   platformOrderReference: string;
   periodId: string;
@@ -28,7 +28,7 @@ type RawConfirmation = {
   durationMs: number;
 };
 
-type RawSubmission =
+export type RawSubmission =
   | RawConfirmation
   | { status: "REJECTED"; reasonCode?: string }
   | { status: "TIMEOUT_AFTER_SEND" };
@@ -43,7 +43,7 @@ export type PlatformSubmissionResult =
   | { state: "REJECTED"; reasonCode: string }
   | { state: "UNKNOWN"; reasonCode: string };
 
-type PlatformBridge = {
+export type PlatformBridge = {
   readState(): Promise<unknown>;
   submit(order: FrozenOrder): Promise<RawSubmission>;
   findOrder(order: FrozenOrder): Promise<RawConfirmation | null>;

@@ -38,7 +38,11 @@ from champion_follow_server.schemas.auth import (
     UserRefreshRequest,
     UserSessionResponse,
 )
-from champion_follow_server.schemas.admin import UserReportResponse
+from champion_follow_server.schemas.admin import (
+    PlatformEndpointResponse,
+    UserReportResponse,
+)
+from champion_follow_server.services.platform_endpoints import public_envelope
 from champion_follow_server.services.device_binding import InvalidEnrollment
 from champion_follow_server.services.sessions import AuthenticationFailed
 
@@ -274,6 +278,23 @@ async def task_signing_keys(
             )
         ]
     )
+
+
+@router.get(
+    "/api/v1/auth/platform-endpoint",
+    response_model=PlatformEndpointResponse,
+)
+async def platform_endpoint(
+    response: Response,
+    request: Request,
+    _context: DeviceContext = Depends(require_active_device_context),
+    db_session=Depends(get_session),
+):
+    _no_store(response)
+    current = await request.app.state.platform_endpoint_service.current(db_session)
+    if current is None:
+        raise HTTPException(status_code=404, detail="platform endpoint unavailable")
+    return PlatformEndpointResponse.model_validate(public_envelope(current))
 
 
 @router.post("/api/v1/admin/session", response_model=AdminSessionResponse)

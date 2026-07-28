@@ -101,6 +101,24 @@ class GlobalControl(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class PlatformEndpointConfig(Base):
+    __tablename__ = "platform_endpoint_configs"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    config_version: Mapped[int] = mapped_column(BigInteger, unique=True)
+    entry_url: Mapped[str] = mapped_column(String(2048))
+    allowed_origins: Mapped[list[str]] = mapped_column(JSON)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    signing_key_version: Mapped[str] = mapped_column(String(32))
+    signature: Mapped[bytes] = mapped_column(LargeBinary(64))
+    reason: Mapped[str] = mapped_column(String(500))
+    updated_by_account_id: Mapped[UUID] = mapped_column(
+        ForeignKey("app_accounts.id")
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 

@@ -51,9 +51,11 @@ describe("ReadonlySignalFeed", () => {
 
     socketOptions!.onSynchronized?.(null);
     expect(feed.viewState()).toMatchObject({ status: "SYNCED", task: null });
+    expect(feed.currentTask()).toBeNull();
 
     const task = signedTask();
     socketOptions!.onTask?.(task);
+    expect(feed.currentTask()).toEqual(task);
     expect(feed.viewState()).toMatchObject({
       status: "SYNCED",
       task: {

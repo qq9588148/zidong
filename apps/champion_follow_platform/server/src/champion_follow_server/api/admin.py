@@ -15,7 +15,10 @@ from champion_follow_server.api.dependencies import (
     require_admin_csrf,
 )
 from champion_follow_server.db.session import get_session
-from champion_follow_server.models.admin import AuditEvent, GlobalControl
+from champion_follow_server.models.admin import (
+    AuditEvent,
+    GlobalControl,
+)
 from champion_follow_server.models.auth import (
     Account,
     AccountRole,
@@ -38,6 +41,8 @@ from champion_follow_server.schemas.admin import (
     GlobalStopResponse,
     MutationStatusResponse,
     OverviewResponse,
+    PlatformEndpointRequest,
+    PlatformEndpointResponse,
     ReasonRequest,
     TaskItemResponse,
     TaskPage,
@@ -55,6 +60,7 @@ from champion_follow_server.services.thresholds import (
     PreviewMismatch,
     ThresholdProposal,
 )
+from champion_follow_server.services.platform_endpoints import public_envelope
 
 
 router = APIRouter(prefix="/api/v1/admin", tags=["administrator"])
@@ -63,6 +69,23 @@ ACTOR_REF = re.compile(r"^A[0-9]{6,}$")
 PUBLIC_DIRECTIONS = frozenset(
     {"BIG", "SMALL", "ODD", "EVEN", "PRIME", "COMPOSITE"}
 )
+
+
+@router.get(
+    "/platform-endpoint",
+    response_model=PlatformEndpointResponse,
+)
+async def get_platform_endpoint(
+    response: Response,
+    request: Request,
+    _context: AdminContext = Depends(require_admin_context),
+    db_session=Depends(get_session),
+):
+    _no_store(response)
+    current = await request.app.state.platform_endpoint_service.current(db_session)
+    if current is None:
+        raise HTTPException(status_code=404, detail="platform endpoint unavailable")
+    return PlatformEndpointResponse.model_validate(public_envelope(current))
 
 
 def _no_store(response: Response) -> None:
@@ -726,3 +749,30 @@ async def set_global_stop(
         reason=control.reason,
         updated_at=control.updated_at,
     )
+
+
+@router.post(
+    "/platform-endpoint",
+    response_model=PlatformEndpointResponse,
+)
+async def set_platform_endpoint(
+    body: PlatformEndpointRequest,
+    response: Response,
+    request: Request,
+    context: AdminContext = Depends(require_admin_csrf),
+    db_session=Depends(get_session),
+):
+    _no_store(response)
+    try:
+        row = await request.app.state.platform_endpoint_service.update(
+            db_session,
+            actor_account_id=context.account.id,
+            entry_url=body.entry_url,
+            reason=_reason(body.reason),
+            request_id=_request_id(request),
+        )
+        await db_session.commit()
+    except ValueError:
+        await db_session.rollback()
+        raise HTTPException(status_code=422, detail="invalid platform endpoint") from None
+    return PlatformEndpointResponse.model_validate(public_envelope(row))

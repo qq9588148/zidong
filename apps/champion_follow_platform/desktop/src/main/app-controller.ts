@@ -10,6 +10,19 @@ import type {
   SignalViewState,
 } from "../shared/ipc";
 
+type ExecutionControl = {
+  canEnable(): boolean;
+  setEnabled(enabled: boolean): void;
+  start?(): void;
+  stop?(): void;
+  isEnabled?(): boolean;
+};
+
+const disabledExecutionControl: ExecutionControl = {
+  canEnable: () => false,
+  setEnabled: () => undefined,
+};
+
 export const initialRuntimeState = (): RuntimeState => ({
   generation: randomUUID(),
   autoBet: "OFF",
@@ -30,13 +43,23 @@ export class AppController {
         errorCode: null,
       }),
     },
+    private readonly execution: ExecutionControl = disabledExecutionControl,
   ) {}
 
   async initialize(): Promise<void> {
     await this.auth.initialize();
+    this.execution.start?.();
   }
 
   getState(): ClientViewState {
+    if (this.runtime.autoBet === "ON" &&
+        this.execution.isEnabled?.() === false) {
+      this.runtime = {
+        ...this.runtime,
+        autoBet: "OFF",
+        executionBlock: "STARTUP_SYNC_REQUIRED",
+      };
+    }
     return {
       ...this.runtime,
       connection: this.auth.viewState(),
@@ -54,7 +77,24 @@ export class AppController {
 
   setAutoBet(enabled: boolean): ClientViewState {
     if (enabled === false) {
-      this.runtime = { ...this.runtime, autoBet: "OFF" };
+      this.execution.setEnabled(false);
+      this.runtime = {
+        ...this.runtime,
+        autoBet: "OFF",
+        executionBlock: "STARTUP_SYNC_REQUIRED",
+      };
+    } else if (
+      this.auth.viewState().status === "ONLINE" &&
+      this.execution.canEnable()
+    ) {
+      this.execution.setEnabled(true);
+      if (this.execution.isEnabled?.() !== false) {
+        this.runtime = {
+          ...this.runtime,
+          autoBet: "ON",
+          executionBlock: null,
+        };
+      }
     }
     return this.getState();
   }

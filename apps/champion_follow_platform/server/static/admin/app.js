@@ -18,6 +18,7 @@ const panelTitles = {
   "champions-panel": "冠军画像",
   "tasks-panel": "任务流水",
   "threshold-panel": "门槛策略",
+  "platform-panel": "平台地址",
   "authorization-panel": "授权管理",
   "audit-panel": "审计记录",
 };
@@ -622,6 +623,45 @@ async function disableSelectedAccount() {
   }
 }
 
+async function loadPlatformEndpoint() {
+  try {
+    const data = await api("/api/v1/admin/platform-endpoint");
+    byId("platform-entry-url").value = data.entry_url;
+    byId("platform-version").textContent = `版本 ${data.config_version}`;
+    showMessage("platform-message", "当前地址已由服务器签名下发。", "success");
+  } catch (_error) {
+    byId("platform-version").textContent = "使用客户端内置地址";
+    showMessage("platform-message", "尚未保存后台地址，客户端继续使用内置安全地址。");
+  }
+}
+
+async function savePlatformEndpoint(event) {
+  event.preventDefault();
+  const entryUrl = byId("platform-entry-url").value.trim();
+  const reason = byId("platform-reason").value.trim();
+  if (!entryUrl || !reason) {
+    showMessage("platform-message", "地址和修改原因都必须填写。");
+    return;
+  }
+  const button = byId("platform-save");
+  setBusy(button, true, "正在保存…");
+  try {
+    const data = await api("/api/v1/admin/platform-endpoint", {
+      method: "POST",
+      body: JSON.stringify({ entry_url: entryUrl, reason }),
+    });
+    byId("platform-entry-url").value = data.entry_url;
+    byId("platform-reason").value = "";
+    byId("platform-version").textContent = `版本 ${data.config_version}`;
+    showMessage("platform-message", "默认地址已签名保存，客户端下次同步后生效。", "success");
+    await loadAudit();
+  } catch (_error) {
+    showMessage("platform-message", "保存失败，请确认是完整的 HTTPS 地址。");
+  } finally {
+    setBusy(button, false);
+  }
+}
+
 async function loadDashboard() {
   showMessage("dashboard-message", "");
   const button = byId("refresh-button");
@@ -633,6 +673,7 @@ async function loadDashboard() {
       loadChampions(),
       loadTasks(),
       loadAudit(),
+      loadPlatformEndpoint(),
     ]);
   } catch (_error) {
     showMessage("dashboard-message", "部分数据暂时无法读取，请稍后刷新。");
@@ -653,6 +694,7 @@ document.addEventListener("DOMContentLoaded", () => {
   byId("threshold-preview").addEventListener("click", previewThreshold);
   byId("threshold-activate").addEventListener("click", activateThreshold);
   byId("authorization-form").addEventListener("submit", generateAuthorizationCode);
+  byId("platform-form").addEventListener("submit", savePlatformEndpoint);
   byId("copy-code-button").addEventListener("click", copyAuthorizationCode);
   byId("authorization-code-dialog").addEventListener("close", clearAuthorizationCode);
   byId("unbind-device-button").addEventListener("click", unbindSelectedDevice);

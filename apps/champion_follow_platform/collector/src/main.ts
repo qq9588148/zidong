@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,15 +15,21 @@ import {
 
 import { CAPTURE_EVENT_CHUNK_LIMIT } from "./capture-pipeline.js";
 import {
+  CollectorEntryStore,
+  clickBtcFfcEntry,
+} from "./collector-entry.js";
+import {
   LocalCollectorServer,
   collectorWindowTitle,
   resolveCollectorConfig,
 } from "./collector-mode.js";
 import { connectionPageUrl } from "./connection-page.js";
 import { capturedEventSchema, type CapturedEvent } from "./contracts.js";
+import { configureCollectorDiagnostics } from "./diagnostic-port.js";
 import {
   CollectorCredentialStore,
-  parseCredentialImportArgs,
+  credentialInputStream,
+  parseCredentialImportProcessArgs,
   type CollectorCredential,
 } from "./credential-store.js";
 import { IdentityStore } from "./identity-store.js";
@@ -80,6 +87,10 @@ function strictCaptureBatch(value: unknown): CapturedEvent[] {
 }
 
 async function run(): Promise<void> {
+  configureCollectorDiagnostics(
+    app.commandLine,
+    process.env.CHAMPION_COLLECTOR_LOCAL_DIAGNOSTICS,
+  );
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
@@ -90,6 +101,10 @@ async function run(): Promise<void> {
   const platformUrl = config.platformUrl;
   const runtimeRoot = join(app.getPath("userData"), "main-collector-v1");
   await mkdir(runtimeRoot, { recursive: true, mode: 0o700 });
+  const entryStore = new CollectorEntryStore(
+    join(runtimeRoot, "platform-entry.json"),
+  );
+  let entryUrl = await entryStore.load(platformUrl);
 
   const credentialStore = new CollectorCredentialStore(
     join(runtimeRoot, "collector-credential.enc"),
@@ -100,7 +115,10 @@ async function run(): Promise<void> {
     safeStorage,
   );
   const journal = new AppendOnlyJournal(runtimeRoot);
-  const importMode = parseCredentialImportArgs(process.argv.slice(2));
+  const importMode = parseCredentialImportProcessArgs(
+    process.argv,
+    app.isPackaged,
+  );
 
   let namespaceKey: Buffer | null = null;
   let collectorId: string | null = null;
@@ -113,6 +131,7 @@ async function run(): Promise<void> {
   let historyRecoveryTask: Promise<void> | null = null;
   let navigationRecovery: NavigationRecoveryCoordinator | null = null;
   let statusTimer: ReturnType<typeof setInterval> | null = null;
+  let gameEntryTimer: ReturnType<typeof setInterval> | null = null;
   let captureStopped = false;
   let historyRequestNumber = 0;
   let historyCursorMs = Date.now() + 1;
@@ -381,6 +400,8 @@ async function run(): Promise<void> {
     captureStopped = true;
     if (statusTimer !== null) clearInterval(statusTimer);
     statusTimer = null;
+    if (gameEntryTimer !== null) clearInterval(gameEntryTimer);
+    gameEntryTimer = null;
     await navigationRecovery?.stop();
     await stopHistoryRecovery();
     await stopCollectorLoops();
@@ -414,7 +435,14 @@ async function run(): Promise<void> {
       if (importMode.kind === "file") {
         credential = await credentialStore.importFromFile(importMode.path);
       } else if (importMode.kind === "stdin") {
-        credential = await credentialStore.importFromStdin(process.stdin);
+        credential = await credentialStore.importFromStdin(
+          credentialInputStream(
+            process.platform,
+            process.stdin,
+            (input) => readFileSync(input),
+            process.env.CHAMPION_COLLECTOR_STDIN_PIPE,
+          ),
+        );
       } else {
         credential = await credentialStore.load();
       }
@@ -477,11 +505,20 @@ async function run(): Promise<void> {
       statusTimer = setInterval(updateTitle, 1_000);
       updateTitle();
       recordCaptureStatus("waiting_for_page");
-      await configureCollectorSession(window.webContents.session);
+      await configureCollectorSession(
+        window.webContents.session,
+        process.versions.chrome,
+        process.env.CHAMPION_PLATFORM_PROXY_URL,
+      );
       installCollectorWindowPolicy(
         window.webContents.session,
         window.webContents,
       );
+      const rememberEntry = (_event: unknown, url: string): void => {
+        void entryStore.save(url);
+      };
+      window.webContents.on("did-navigate", rememberEntry);
+      window.webContents.on("did-navigate-in-page", rememberEntry);
       await window.loadURL(connectionPageUrl(0));
       navigationRecovery = new NavigationRecoveryCoordinator({
         async pause() {
@@ -627,10 +664,25 @@ async function run(): Promise<void> {
 
       void loadPlatformUntilAccepted(
         async () => {
-          await window.loadURL(platformUrl);
+          try {
+            await window.loadURL(entryUrl);
+          } catch (error) {
+            if (entryUrl === platformUrl) throw error;
+            entryUrl = platformUrl;
+            await window.loadURL(entryUrl);
+          }
           platformConnected = true;
           recordCaptureStatus("page_connected");
           updateTitle();
+          if (gameEntryTimer === null) {
+            const script = `(${clickBtcFfcEntry.toString()})(document)`;
+            gameEntryTimer = setInterval(() => {
+              if (window.isDestroyed() || cleaned) return;
+              void window.webContents.executeJavaScript(script).catch(
+                () => undefined,
+              );
+            }, 2_000);
+          }
         },
         () => !window.isDestroyed() && !cleaned,
         async (retryCount) => {

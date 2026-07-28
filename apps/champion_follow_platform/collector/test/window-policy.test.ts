@@ -91,7 +91,7 @@ describe("collector Electron window policy", () => {
     expect(isSecurePlatformNavigation("file:///C:/private.txt")).toBe(false);
   });
 
-  it("forces the persistent collector session to connect directly", async () => {
+  it("uses system proxy by default and accepts only an explicit loopback proxy", async () => {
     const fakeSession = {
       setUserAgent: vi.fn(),
       setPermissionCheckHandler: vi.fn(),
@@ -101,11 +101,32 @@ describe("collector Electron window policy", () => {
 
     await configureCollectorSession(fakeSession as never, "142.0.7444.175");
 
-    expect(fakeSession.setProxy).toHaveBeenCalledWith({ mode: "direct" });
+    expect(fakeSession.setProxy).toHaveBeenCalledWith({ mode: "system" });
     expect(fakeSession.setUserAgent).toHaveBeenCalledWith(
       expect.stringContaining("Chrome/142.0.7444.175"),
       "zh-CN,zh;q=0.9,en;q=0.8",
     );
+
+    const proxiedSession = {
+      setUserAgent: vi.fn(),
+      setPermissionCheckHandler: vi.fn(),
+      on: vi.fn(),
+      setProxy: vi.fn(async () => undefined),
+    };
+    await configureCollectorSession(
+      proxiedSession as never,
+      "142.0.7444.175",
+      "http://127.0.0.1:25378",
+    );
+    expect(proxiedSession.setProxy).toHaveBeenCalledWith({
+      mode: "fixed_servers",
+      proxyRules: "http=127.0.0.1:25378;https=127.0.0.1:25378",
+    });
+    await expect(configureCollectorSession(
+      { ...proxiedSession, setProxy: vi.fn(async () => undefined) } as never,
+      "142.0.7444.175",
+      "http://proxy.example:25378",
+    )).rejects.toThrow("collector_proxy_invalid");
   });
 
   it("keeps retrying a transient initial page failure without exiting", async () => {

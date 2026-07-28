@@ -66,6 +66,10 @@ export function isPlatformWindowOpen(): boolean {
   return platformWindow !== null && !platformWindow.isDestroyed();
 }
 
+export function getPlatformBrowserWindow(): BrowserWindow | null {
+  return isPlatformWindowOpen() ? platformWindow : null;
+}
+
 export function getLatestPlatformPageProbe(): PlatformPageProbe | null {
   return latestPlatformProbe;
 }
@@ -76,6 +80,15 @@ export function getPlatformSessionPersistenceState(): PlatformSessionPersistence
 
 export function allowPlatformWindowCloseForExit(): void {
   platformWindowMayClose = true;
+}
+
+export function reopenNgPlatformWindow(): BrowserWindow {
+  if (isPlatformWindowOpen()) {
+    platformWindow!.destroy();
+    platformWindow = null;
+  }
+  platformWindowMayClose = false;
+  return openNgPlatformWindow();
 }
 
 export function openNgPlatformWindow(): BrowserWindow {
@@ -107,7 +120,11 @@ export function openNgPlatformWindow(): BrowserWindow {
     latestPlatformProbe = null;
     if (platformWindow === window) platformWindow = null;
   });
-  void configurePlatformSession(window.webContents.session)
+  void configurePlatformSession(
+    window.webContents.session,
+    process.versions.chrome,
+    process.env.CHAMPION_PLATFORM_PROXY_URL,
+  )
     .then(async () => {
       if (!window.isDestroyed()) {
         await protectedSession.load();

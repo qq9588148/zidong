@@ -29,21 +29,49 @@ export function collectorUserAgent(chromiumVersion: string): string {
   ].join(" ");
 }
 
-export function configureCollectorSession(
+export async function configureCollectorSession(
   collectorSession: Session,
   chromiumVersion: string = process.versions.chrome,
+  proxyUrl?: string,
 ): Promise<void> {
   const existing = configuredSessions.get(collectorSession);
-  if (existing) return existing;
+  if (existing) return await existing;
   collectorSession.setUserAgent(
     collectorUserAgent(chromiumVersion),
     "zh-CN,zh;q=0.9,en;q=0.8",
   );
   collectorSession.setPermissionCheckHandler(() => false);
   collectorSession.on("will-download", (event) => event.preventDefault());
-  const configured = collectorSession.setProxy({ mode: "direct" });
+  const configured = collectorSession.setProxy(
+    platformProxyConfiguration(proxyUrl, "collector_proxy_invalid"),
+  );
   configuredSessions.set(collectorSession, configured);
-  return configured;
+  await configured;
+}
+
+function platformProxyConfiguration(
+  value: string | undefined,
+  errorCode: string,
+): { mode: "system" } | { mode: "fixed_servers"; proxyRules: string } {
+  if (value === undefined || value.trim() === "") return { mode: "system" };
+  try {
+    const url = new URL(value);
+    const loopback = url.hostname === "127.0.0.1" ||
+      url.hostname === "localhost" || url.hostname === "[::1]";
+    const port = Number(url.port);
+    if (url.protocol !== "http:" || !loopback || url.username || url.password ||
+        url.pathname !== "/" || url.search || url.hash ||
+        !Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new Error();
+    }
+    const endpoint = `${url.hostname}:${port}`;
+    return {
+      mode: "fixed_servers",
+      proxyRules: `http=${endpoint};https=${endpoint}`,
+    };
+  } catch {
+    throw new Error(errorCode);
+  }
 }
 
 export async function loadPlatformUntilAccepted(

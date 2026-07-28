@@ -154,10 +154,8 @@ export function probePlatformDocument(document: Document): PlatformPageProbe {
     countdownMs !== null &&
     periodCandidateCount > 0 &&
     countdownCandidateCount > 0 &&
-    Object.values(directionTextCounts).every((count) => count > 0) &&
     balanceLabelVisible &&
     balanceValueReadable &&
-    stakeInputCount > 0 &&
     betControlCount > 0;
 
   return Object.freeze({
@@ -250,10 +248,8 @@ export function mergePlatformPageProbes(
     result.countdownMs !== null &&
     result.periodCandidateCount > 0 &&
     result.countdownCandidateCount > 0 &&
-    Object.values(result.directionTextCounts).every((count) => count > 0) &&
     result.balanceLabelVisible &&
     result.balanceValueReadable &&
-    result.stakeInputCount > 0 &&
     result.betControlCount > 0;
   return parsePlatformPageProbe(result)!;
 }

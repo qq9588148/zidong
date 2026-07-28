@@ -72,12 +72,53 @@ export function parseCredentialImportArgs(argv: string[]): CredentialImportMode 
   return { kind: "stored" };
 }
 
-function parseCredential(raw: Buffer): CollectorCredential {
-  try {
-    return schema.parse(JSON.parse(raw.toString("utf8")));
-  } catch {
-    throw safeError("collector_credential_invalid");
+export function parseCredentialImportProcessArgs(
+  argv: string[],
+  isPackaged: boolean,
+): CredentialImportMode {
+  return parseCredentialImportArgs(argv.slice(isPackaged ? 1 : 2));
+}
+
+export function credentialInputStream(
+  platform: NodeJS.Platform,
+  stdin: AsyncIterable<string | Uint8Array>,
+  readInput: (input: number | string) => Buffer,
+  windowsPipe?: string,
+): AsyncIterable<string | Uint8Array> {
+  if (platform !== "win32") return stdin;
+  if (
+    windowsPipe !== undefined &&
+    !/^\\\\\.\\pipe\\champion-follow-collector-[0-9a-f]{32}$/.test(
+      windowsPipe,
+    )
+  ) {
+    throw safeError("collector_credential_pipe_invalid");
   }
+  return (async function* () {
+    const bytes = readInput(windowsPipe ?? 0);
+    try {
+      yield bytes;
+    } finally {
+      bytes.fill(0);
+    }
+  })();
+}
+
+function parseCredential(raw: Buffer): CollectorCredential {
+  if (raw.length === 0) {
+    throw safeError("collector_credential_input_empty");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.toString("utf8"));
+  } catch {
+    throw safeError("collector_credential_json_invalid");
+  }
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    throw safeError("collector_credential_schema_invalid");
+  }
+  return result.data;
 }
 
 export class CollectorCredentialStore {

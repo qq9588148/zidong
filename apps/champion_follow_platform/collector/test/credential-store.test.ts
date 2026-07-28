@@ -7,7 +7,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   CollectorCredentialStore,
+  credentialInputStream,
   parseCredentialImportArgs,
+  parseCredentialImportProcessArgs,
 } from "../src/credential-store.js";
 
 const fixtureBearer = `synthetic_fixture_${"x".repeat(48)}`;
@@ -69,6 +71,84 @@ describe("CollectorCredentialStore", () => {
         "--credential-stdin",
       ]),
     ).toThrow("collector_credential_argument_invalid");
+  });
+
+  it("reads packaged Windows credential input from file descriptor zero", async () => {
+    const root = await mkdtemp(join(tmpdir(), "collector-windows-stdin-"));
+    const store = new CollectorCredentialStore(
+      join(root, "collector-credential.enc"),
+      encryption,
+    );
+    const source = credentialInputStream(
+      "win32",
+      Readable.from([]),
+      (fileDescriptor) => {
+        expect(fileDescriptor).toBe(0);
+        return Buffer.from(JSON.stringify(bundle));
+      },
+    );
+    await store.importFromStdin(source);
+    expect(await store.load()).toEqual(bundle);
+    await rm(root, { recursive: true });
+  });
+
+  it("reads packaged Windows credential input from a validated named pipe", async () => {
+    const pipe = "\\\\.\\pipe\\champion-follow-collector-0123456789abcdef0123456789abcdef";
+    const seen: Array<number | string> = [];
+    const source = credentialInputStream(
+      "win32",
+      Readable.from([]),
+      (input) => {
+        seen.push(input);
+        return Buffer.from(JSON.stringify(bundle));
+      },
+      pipe,
+    );
+    const chunks: Buffer[] = [];
+    for await (const chunk of source) chunks.push(Buffer.from(chunk));
+    expect(JSON.parse(Buffer.concat(chunks).toString("utf8"))).toEqual(bundle);
+    expect(seen).toEqual([pipe]);
+    expect(() =>
+      credentialInputStream(
+        "win32",
+        Readable.from([]),
+        () => Buffer.alloc(0),
+        "C:\\temp\\credential.json",
+      )
+    ).toThrow("collector_credential_pipe_invalid");
+  });
+
+  it("reports safe stdin framing errors without exposing input", async () => {
+    const root = await mkdtemp(join(tmpdir(), "collector-stdin-errors-"));
+    const store = new CollectorCredentialStore(
+      join(root, "collector-credential.enc"),
+      encryption,
+    );
+    await expect(store.importFromStdin(Readable.from([]))).rejects.toThrow(
+      "collector_credential_input_empty",
+    );
+    await expect(
+      store.importFromStdin(Readable.from(["not-json"])),
+    ).rejects.toThrow("collector_credential_json_invalid");
+    await expect(
+      store.importFromStdin(Readable.from([JSON.stringify({ format: "wrong" })])),
+    ).rejects.toThrow("collector_credential_schema_invalid");
+    await rm(root, { recursive: true });
+  });
+
+  it("reads credential flags from packaged and development Electron argv", () => {
+    expect(
+      parseCredentialImportProcessArgs(
+        ["Champion Follow Collector.exe", "--credential-stdin"],
+        true,
+      ),
+    ).toEqual({ kind: "stdin" });
+    expect(
+      parseCredentialImportProcessArgs(
+        ["electron.exe", "main.js", "--credential-stdin"],
+        false,
+      ),
+    ).toEqual({ kind: "stdin" });
   });
 
   it("rejects a group-readable handoff before reading it", async () => {

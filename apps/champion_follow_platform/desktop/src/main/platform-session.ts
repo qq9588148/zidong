@@ -32,12 +32,13 @@ export async function getPlatformSession(deviceId: string): Promise<Session> {
   return platformSession;
 }
 
-export function configurePlatformSession(
+export async function configurePlatformSession(
   platformSession: Session,
   chromiumVersion: string = process.versions.chrome,
+  proxyUrl?: string,
 ): Promise<void> {
   const existing = configuredSessions.get(platformSession);
-  if (existing) return existing;
+  if (existing) return await existing;
   platformSession.setUserAgent(
     platformUserAgent(chromiumVersion),
     "zh-CN,zh;q=0.9,en;q=0.8",
@@ -47,9 +48,35 @@ export function configurePlatformSession(
   });
   platformSession.setPermissionCheckHandler(() => false);
   platformSession.on("will-download", (event) => event.preventDefault());
-  const configured = platformSession.setProxy({ mode: "direct" });
+  const configured = platformSession.setProxy(
+    platformProxyConfiguration(proxyUrl),
+  );
   configuredSessions.set(platformSession, configured);
-  return configured;
+  await configured;
+}
+
+function platformProxyConfiguration(
+  value: string | undefined,
+): { mode: "system" } | { mode: "fixed_servers"; proxyRules: string } {
+  if (value === undefined || value.trim() === "") return { mode: "system" };
+  try {
+    const url = new URL(value);
+    const loopback = url.hostname === "127.0.0.1" ||
+      url.hostname === "localhost" || url.hostname === "[::1]";
+    const port = Number(url.port);
+    if (url.protocol !== "http:" || !loopback || url.username || url.password ||
+        url.pathname !== "/" || url.search || url.hash ||
+        !Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new Error();
+    }
+    const endpoint = `${url.hostname}:${port}`;
+    return {
+      mode: "fixed_servers",
+      proxyRules: `http=${endpoint};https=${endpoint}`,
+    };
+  } catch {
+    throw new Error("platform_proxy_invalid");
+  }
 }
 
 export function platformUserAgent(chromiumVersion: string): string {

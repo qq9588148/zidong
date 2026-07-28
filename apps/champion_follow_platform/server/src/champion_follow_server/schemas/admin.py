@@ -237,3 +237,18 @@ class AuditPage(StrictAdminSchema):
 class MutationStatusResponse(StrictAdminSchema):
     status: Literal["ok"]
     cancelled_task_count: int
+
+
+class PlatformEndpointRequest(StrictAdminSchema):
+    entry_url: str = Field(min_length=10, max_length=2048)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class PlatformEndpointResponse(StrictAdminSchema):
+    config_version: int = Field(ge=1)
+    issued_at: str
+    expires_at: str
+    entry_url: str
+    allowed_origins: list[str]
+    signing_key_version: str
+    signature: str

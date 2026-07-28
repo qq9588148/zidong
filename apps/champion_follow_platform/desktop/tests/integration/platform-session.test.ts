@@ -44,7 +44,7 @@ describe("platform session", () => {
     )).toBe(false);
   });
 
-  it("forces the isolated Chromium session to connect directly", async () => {
+  it("uses system proxy by default and accepts only an explicit loopback proxy", async () => {
     const platformSession = {
       setUserAgent: vi.fn(),
       setPermissionRequestHandler: vi.fn(),
@@ -57,7 +57,32 @@ describe("platform session", () => {
     await configurePlatformSession(platformSession, "142.0.7444.175");
 
     expect(platformSession.setProxy).toHaveBeenCalledOnce();
-    expect(platformSession.setProxy).toHaveBeenCalledWith({ mode: "direct" });
+    expect(platformSession.setProxy).toHaveBeenCalledWith({ mode: "system" });
+
+    const proxiedSession = {
+      setUserAgent: vi.fn(),
+      setPermissionRequestHandler: vi.fn(),
+      setPermissionCheckHandler: vi.fn(),
+      on: vi.fn(),
+      setProxy: vi.fn(async () => undefined),
+    } as unknown as Session;
+    await configurePlatformSession(
+      proxiedSession,
+      "142.0.7444.175",
+      "http://127.0.0.1:25378",
+    );
+    expect(proxiedSession.setProxy).toHaveBeenCalledWith({
+      mode: "fixed_servers",
+      proxyRules: "http=127.0.0.1:25378;https=127.0.0.1:25378",
+    });
+    await expect(configurePlatformSession(
+      {
+        ...proxiedSession,
+        setProxy: vi.fn(async () => undefined),
+      } as unknown as Session,
+      "142.0.7444.175",
+      "http://proxy.example:25378",
+    )).rejects.toThrow("platform_proxy_invalid");
   });
 
   it("clears cookies, auth cache and cache when the platform logs out", async () => {

@@ -30,6 +30,7 @@ type ReadonlySignalFeedOptions = {
 
 export class ReadonlySignalFeed {
   private state: SignalViewState = waitingState();
+  private executableTask: DeviceTaskEnvelope | null = null;
   private socket: TaskSocketLike | null = null;
   private connectedPeriod: string | null = null;
   private refreshInFlight = false;
@@ -44,6 +45,12 @@ export class ReadonlySignalFeed {
       ...this.state,
       task: this.state.task === null ? null : { ...this.state.task },
     } as SignalViewState;
+  }
+
+  currentTask(): DeviceTaskEnvelope | null {
+    return this.executableTask === null
+      ? null
+      : structuredClone(this.executableTask);
   }
 
   start(): void {
@@ -108,17 +115,20 @@ export class ReadonlySignalFeed {
         reducer,
         onSynchronized: (task) => {
           if (generation !== this.connectionGeneration) return;
+          this.executableTask = task === null ? null : structuredClone(task);
           this.state = synchronizedState(periodId, task);
         },
         onTask: (task) => {
           if (generation !== this.connectionGeneration ||
               task.period_id !== this.connectedPeriod) return;
+          this.executableTask = structuredClone(task);
           this.state = synchronizedState(task.period_id, task);
         },
         onDisconnected: () => {
           if (generation !== this.connectionGeneration) return;
           this.socket = null;
           this.connectedPeriod = null;
+          this.executableTask = null;
           this.nextAttemptAt = this.now() + this.reconnectDelayMs();
           this.state = {
             status: "OFFLINE",
@@ -154,6 +164,7 @@ export class ReadonlySignalFeed {
     const socket = this.socket;
     this.socket = null;
     this.connectedPeriod = null;
+    this.executableTask = null;
     socket?.close();
   }
 
