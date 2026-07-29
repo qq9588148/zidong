@@ -15,11 +15,11 @@ import {
 } from "../src/server-api.js";
 import { ReliableUploader } from "../src/uploader.js";
 
-function record(seq: number): JournalRecord {
+function record(seq: number, issue = "2607270001"): JournalRecord {
   const event = capturedEventSchema.parse({
     kind: "CLOSE",
     eventKey: seq.toString(16).padStart(64, "0"),
-    issue: "2607270001",
+    issue,
     sourceMs: 1000 + seq,
     receivedAtMs: 2000 + seq,
     source: "realtime",
@@ -38,7 +38,8 @@ class FakeJournal {
   readonly advances: number[] = [];
 
   pending(limit = 200): JournalRecord[] {
-    return this.records.slice(0, limit);
+    return this.records.filter((row) => row.seq > this.acknowledgedSeq)
+      .slice(0, limit);
   }
 
   async advanceAck(seq: number): Promise<void> {
@@ -92,6 +93,30 @@ describe("ReliableUploader", () => {
     await expect(uploader.tick()).resolves.toBe(6);
     expect(sent).toEqual([4, 5, 6]);
     expect(journal.advances).toEqual([6]);
+  });
+
+  it("never mixes issues in one wire batch during history backfill", async () => {
+    const journal = new FakeJournal();
+    journal.records.splice(
+      0,
+      journal.records.length,
+      record(4, "2607270001"),
+      record(5, "2607270001"),
+      record(6, "2607270002"),
+    );
+    const batches: number[][] = [];
+    const server = serverWithAppend(async (request) => {
+      batches.push(request.records.map((row) => row.seq));
+      expect(new Set(request.records.map((row) => row.event.issue)).size).toBe(1);
+      return { ack_seq: request.to_seq };
+    });
+    const uploader = new ReliableUploader("collector-main-01", journal, server);
+
+    await expect(uploader.tick()).resolves.toBe(5);
+    await expect(uploader.tick()).resolves.toBe(6);
+
+    expect(batches).toEqual([[4, 5], [6]]);
+    expect(journal.advances).toEqual([5, 6]);
   });
 
   it("leaves the cursor unchanged after a network error and resends", async () => {
@@ -159,6 +184,43 @@ describe("ReliableUploader", () => {
     expect(journal.acknowledgedSeq).toBe(6);
   });
 
+  it("reconciles an HTTP failure after the server committed the issue batch", async () => {
+    const journal = new FakeJournal();
+    journal.records.splice(
+      0,
+      journal.records.length,
+      record(4, "2607270001"),
+      record(5, "2607270001"),
+      record(6, "2607270002"),
+    );
+    const server = serverWithAppend(async () => {
+      throw new Error("collector_network_error");
+    });
+    server.session = async () => ({
+      ack_seq: 5,
+      ack_event_key: journal.records[1]!.event.eventKey,
+      history_anchor_event_key: journal.records[1]!.event.eventKey,
+      namespace_empty: false,
+    });
+    const controller = new AbortController();
+    const delays: number[] = [];
+    const uploader = new ReliableUploader(
+      "collector-main-01",
+      journal,
+      server,
+      async (milliseconds) => {
+        delays.push(milliseconds);
+        controller.abort();
+      },
+    );
+
+    await uploader.run(controller.signal);
+
+    expect(journal.acknowledgedSeq).toBe(5);
+    expect(journal.advances).toEqual([5]);
+    expect(delays).toEqual([0]);
+  });
+
   it("runs heartbeat health independently from event delivery", async () => {
     const journal = new FakeJournal();
     let attempts = 0;
@@ -215,10 +277,12 @@ describe("HttpCollectorServer", () => {
     [409, "collector_sequence_conflict"],
     [500, "collector_server_error"],
   ])("maps status %i to a safe error", async (status, code) => {
+    const observed: string[] = [];
     const server = new HttpCollectorServer(
       "https://collector.test/",
       `synthetic_${"x".repeat(48)}`,
       (async () => new Response("PRIVATE_RESPONSE", { status })) as typeof fetch,
+      (value) => observed.push(value),
     );
 
     await expect(
@@ -227,6 +291,7 @@ describe("HttpCollectorServer", () => {
         namespace_version: "actor-hmac-v1",
       }),
     ).rejects.toThrow(code);
+    expect(observed).toEqual([`http_${status}`]);
   });
 
   it("maps transport failure without exposing its message", async () => {

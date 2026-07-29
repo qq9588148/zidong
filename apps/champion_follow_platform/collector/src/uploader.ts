@@ -39,8 +39,11 @@ export class ReliableUploader {
   }
 
   async tick(): Promise<number> {
-    const records = this.journal.pending(200);
-    if (!records.length) return this.journal.acknowledgedSeq;
+    const pending = this.journal.pending(200);
+    if (!pending.length) return this.journal.acknowledgedSeq;
+    const issue = pending[0]!.event.issue;
+    const boundary = pending.findIndex((record) => record.event.issue !== issue);
+    const records = boundary < 0 ? pending : pending.slice(0, boundary);
     const response = await this.server.append({
       collector_id: this.collectorId,
       namespace_version: "actor-hmac-v1",
@@ -74,11 +77,38 @@ export class ReliableUploader {
         if (error instanceof Error && error.message === "journal_write_failed") {
           throw error;
         }
+        let recovered = false;
+        try {
+          recovered = await this.reconcileCommittedBatch();
+        } catch {
+          recovered = false;
+        }
+        if (recovered) {
+          failures = 0;
+          await this.waitFor(0, signal);
+          continue;
+        }
         const delay = RETRY_DELAYS[Math.min(failures, RETRY_DELAYS.length - 1)]!;
         failures += 1;
         await this.waitFor(delay, signal);
       }
     }
+  }
+
+  private async reconcileCommittedBatch(): Promise<boolean> {
+    const localAck = this.journal.acknowledgedSeq;
+    const remote = await this.server.session({
+      collector_id: this.collectorId,
+      namespace_version: "actor-hmac-v1",
+    });
+    if (remote.ack_seq <= localAck) return false;
+    const row = this.journal.pending(200)
+      .find((candidate) => candidate.seq === remote.ack_seq);
+    if (!row || row.event.eventKey !== remote.ack_event_key) {
+      throw new Error("collector_sequence_conflict");
+    }
+    await this.journal.advanceAck(remote.ack_seq);
+    return true;
   }
 
   async runHeartbeats(

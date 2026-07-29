@@ -40,6 +40,7 @@ export class HttpCollectorServer implements CollectorServerPort {
     baseUrl: string,
     private readonly bearer: string,
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly observeStatus: (status: string) => void = () => undefined,
   ) {
     try {
       this.root = new URL(baseUrl);
@@ -96,8 +97,10 @@ export class HttpCollectorServer implements CollectorServerPort {
         ),
       });
     } catch {
+      this.observeStatus("network_error");
       throw new Error("collector_network_error");
     }
+    this.observeStatus(response.ok ? "ok" : `http_${response.status}`);
     if (response.status === 401 || response.status === 403) {
       throw new Error("collector_auth_rejected");
     }

@@ -157,6 +157,13 @@ async function run(): Promise<void> {
     }).catch(() => undefined);
   }
 
+  function recordUploadStatus(status: string): void {
+    void writeFile(join(runtimeRoot, "upload-status.txt"), `${status}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    }).catch(() => undefined);
+  }
+
   function recordCaptureStop(reason: string): void {
     captureStopped = true;
     recordCaptureStatus(reason);
@@ -452,7 +459,12 @@ async function run(): Promise<void> {
     createServer(credential) {
       if (config.mode === "local") return new LocalCollectorServer(journal);
       if (!("bearer" in credential)) throw new Error("collector_config_invalid");
-      return new HttpCollectorServer(config.serverUrl!, credential.bearer);
+      return new HttpCollectorServer(
+        config.serverUrl!,
+        credential.bearer,
+        fetch,
+        recordUploadStatus,
+      );
     },
     async openJournal() {
       await journal.start();
