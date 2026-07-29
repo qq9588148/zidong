@@ -156,6 +156,14 @@ async def collector_heartbeat(
     body: CollectorHeartbeat, request: Request
 ) -> Response:
     identity = await _authenticated_identity(request, body.collector_id)
+    try:
+        await request.app.state.ingestion.repository.collector_session(
+            identity.collector_id,
+            identity.namespace_version,
+        )
+    except CollectorContractError as error:
+        _raise_public_ingestion_error(error)
+        raise AssertionError("unreachable")
     await request.app.state.ingestion.repository.record_heartbeat(
         identity.collector_id,
         issue=body.issue,

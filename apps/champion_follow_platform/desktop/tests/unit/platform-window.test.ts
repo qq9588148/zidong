@@ -4,6 +4,7 @@ import {
   chromeProfileDirectory,
   normalizePlatformAddress,
   platformEndpointRegistry,
+  resolvePlatformProxyUrl,
 } from "../../src/main/platform-window";
 import { isAllowedPlatformNavigation } from "../../src/main/platform-session";
 
@@ -35,5 +36,12 @@ describe("NG platform window", () => {
   it("uses a dedicated Chrome profile instead of the customer's normal profile", () => {
     expect(chromeProfileDirectory("C:/client-data"))
       .toMatch(/client-data[\\/]chrome-client-profile$/);
+  });
+
+  it("does not auto-detect SSTap for the customer browser", () => {
+    expect(resolvePlatformProxyUrl(undefined)).toBeUndefined();
+    expect(resolvePlatformProxyUrl("   ")).toBeUndefined();
+    expect(resolvePlatformProxyUrl(" http://127.0.0.1:25378 "))
+      .toBe("http://127.0.0.1:25378");
   });
 });

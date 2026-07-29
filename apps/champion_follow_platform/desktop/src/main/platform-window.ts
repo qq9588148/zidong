@@ -1,4 +1,3 @@
-import { createConnection } from "node:net";
 import { join } from "node:path";
 
 import { ChromeBrowserController, findChromeExecutable } from "./chrome-controller";
@@ -74,6 +73,11 @@ export function normalizePlatformAddress(value: string): string {
   }
 }
 
+export function resolvePlatformProxyUrl(value?: string): string | undefined {
+  const explicit = value?.trim();
+  return explicit || undefined;
+}
+
 export async function openNgPlatformAddress(value: string): Promise<void> {
   const url = normalizePlatformAddress(value);
   const controller = await ensureChromeController();
@@ -145,16 +149,15 @@ async function createChromeController(): Promise<ChromeBrowserController> {
     : "";
   const executable = await findChromeExecutable([
     process.env.CHAMPION_CHROME_PATH ?? "",
-    bundled,
     join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
     join(localAppData, "Google", "Chrome", "Bin", "chrome.exe"),
     join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
     join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+    bundled,
   ].filter(Boolean));
-  const explicitProxy = process.env.CHAMPION_PLATFORM_PROXY_URL?.trim();
-  const proxyUrl = explicitProxy || await loopbackPortOpen(25_378)
-    ? (explicitProxy || "http://127.0.0.1:25378")
-    : undefined;
+  const proxyUrl = resolvePlatformProxyUrl(
+    process.env.CHAMPION_PLATFORM_PROXY_URL,
+  );
   return new ChromeBrowserController({
     executable,
     profileDirectory: chromeProfileDirectory(),
@@ -186,17 +189,4 @@ function stopPlatformPageProbe(): void {
   if (platformProbeTimer !== null) clearInterval(platformProbeTimer);
   platformProbeTimer = null;
   platformProbeInFlight = false;
-}
-
-async function loopbackPortOpen(port: number): Promise<boolean> {
-  return await new Promise((resolve) => {
-    const socket = createConnection({ host: "127.0.0.1", port });
-    const finish = (value: boolean) => {
-      socket.destroy();
-      resolve(value);
-    };
-    socket.setTimeout(300, () => finish(false));
-    socket.once("connect", () => finish(true));
-    socket.once("error", () => finish(false));
-  });
 }

@@ -1,8 +1,12 @@
+import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import type { ChildProcess, spawn } from "node:child_process";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  ChromeBrowserController,
   chromeLaunchArguments,
   parseDevToolsActivePort,
   selectPlatformPageTarget,
@@ -22,6 +26,35 @@ describe("dedicated Chrome controller", () => {
     expect(args.at(-1)).toBe("https://ng888.com/");
     expect(args.join(" ")).not.toMatch(/password|cookie|token/i);
     expect(args.join(" ")).not.toMatch(/proxy-bypass-list|host-resolver-rules/i);
+  });
+
+  it("forces a direct browser connection unless an explicit proxy is set", () => {
+    const args = chromeLaunchArguments({
+      profileDirectory: "C:/client/chrome-profile",
+      initialUrl: "https://ng888.com/",
+    });
+
+    expect(args).toContain("--no-proxy-server");
+    expect(args.join(" ")).not.toMatch(/--proxy-server=/);
+  });
+
+  it("turns a missing Chrome executable into a controlled startup failure", async () => {
+    const child = Object.assign(new EventEmitter(), {
+      unref: vi.fn(),
+    }) as unknown as ChildProcess;
+    const launch = vi.fn(() => {
+      queueMicrotask(() => child.emit("error", new Error("spawn ENOENT")));
+      return child;
+    }) as unknown as typeof spawn;
+    const controller = new ChromeBrowserController({
+      executable: "C:/missing/chrome.exe",
+      profileDirectory: join(tmpdir(), `champion-follow-${Date.now()}`),
+      initialUrl: "https://ng888.com/",
+      launch,
+    });
+
+    await expect(controller.open()).rejects.toThrow("chrome_start_failed");
+    expect(child.unref).toHaveBeenCalledOnce();
   });
 
   it("parses only a loopback DevTools endpoint", () => {

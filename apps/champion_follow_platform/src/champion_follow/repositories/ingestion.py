@@ -57,7 +57,7 @@ class IngestionRepository:
                 await connection.execute(
                     "SELECT c.id,c.wire_id,c.namespace_id,n.version AS namespace_version "
                     "FROM collectors AS c JOIN identity_namespaces AS n "
-                    "ON n.id=c.namespace_id AND n.mode='active' "
+                    "ON n.id=c.namespace_id "
                     "WHERE c.bearer_sha256=%s",
                     (bearer_sha256,),
                 )

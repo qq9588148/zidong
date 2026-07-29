@@ -378,6 +378,24 @@ async def test_stale_namespace_is_rejected_with_only_a_safe_code(
     assert response.status_code == 409
     assert response.json() == {"detail": {"code": "namespace_version_mismatch"}}
 
+    heartbeat = await wire_client.post(
+        "/v1/collector/heartbeat",
+        headers=authorization(collector_bearer),
+        json={
+            "collector_id": "collector-main-01",
+            "issue": ISSUE,
+            "phase": "BETTING",
+            "countdown_ms": 900,
+            "observed_at_ms": 10,
+            "last_journal_seq": 0,
+            "capture_healthy": True,
+        },
+    )
+    assert heartbeat.status_code == 409
+    assert heartbeat.json() == {
+        "detail": {"code": "namespace_version_mismatch"}
+    }
+
 
 @pytest.mark.integration
 async def test_namespace_empty_depends_on_anchorable_money_history_not_any_source_event(

@@ -43,7 +43,11 @@ export function chromeLaunchArguments(options: ChromeLaunchOptions): string[] {
     "--no-default-browser-check",
     "--disable-background-mode",
   ];
-  if (options.proxyUrl) arguments_.push(`--proxy-server=${options.proxyUrl}`);
+  if (options.proxyUrl) {
+    arguments_.push(`--proxy-server=${options.proxyUrl}`);
+  } else {
+    arguments_.push("--no-proxy-server");
+  }
   arguments_.push("--new-window", options.initialUrl);
   return arguments_;
 }
@@ -208,10 +212,13 @@ export class ChromeBrowserController {
       { detached: true, stdio: "ignore", windowsHide: false },
     );
     this.process = child;
+    const launchFailed = new Promise<never>((_resolve, reject) => {
+      child.once("error", () => reject(new Error("chrome_start_failed")));
+    });
     child.unref();
     const deadline = (this.options.now ?? Date.now)() + 20_000;
     do {
-      await delay(100);
+      await Promise.race([delay(100), launchFailed]);
       const endpoint = await this.readLiveEndpoint();
       if (!endpoint) continue;
       await this.attach(endpoint);

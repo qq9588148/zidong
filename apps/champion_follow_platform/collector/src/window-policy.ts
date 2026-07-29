@@ -1,5 +1,4 @@
 import type { Session, WebContents } from "electron";
-import { createConnection } from "node:net";
 
 const configuredSessions = new WeakMap<Session, Promise<void>>();
 
@@ -34,7 +33,6 @@ export async function configureCollectorSession(
   collectorSession: Session,
   chromiumVersion: string = process.versions.chrome,
   proxyUrl?: string,
-  detectSstap: () => Promise<boolean> = () => loopbackPortOpen(25_378),
 ): Promise<void> {
   const existing = configuredSessions.get(collectorSession);
   if (existing) return await existing;
@@ -44,9 +42,7 @@ export async function configureCollectorSession(
   );
   collectorSession.setPermissionCheckHandler(() => false);
   collectorSession.on("will-download", (event) => event.preventDefault());
-  const selectedProxy = proxyUrl?.trim() || await detectSstap()
-    ? (proxyUrl?.trim() || "http://127.0.0.1:25378")
-    : undefined;
+  const selectedProxy = proxyUrl?.trim() || undefined;
   const configured = collectorSession.setProxy(
     platformProxyConfiguration(selectedProxy, "collector_proxy_invalid"),
   );
@@ -54,24 +50,11 @@ export async function configureCollectorSession(
   await configured;
 }
 
-async function loopbackPortOpen(port: number): Promise<boolean> {
-  return await new Promise((resolve) => {
-    const socket = createConnection({ host: "127.0.0.1", port });
-    const finish = (value: boolean) => {
-      socket.destroy();
-      resolve(value);
-    };
-    socket.setTimeout(300, () => finish(false));
-    socket.once("connect", () => finish(true));
-    socket.once("error", () => finish(false));
-  });
-}
-
 function platformProxyConfiguration(
   value: string | undefined,
   errorCode: string,
-): { mode: "system" } | { mode: "fixed_servers"; proxyRules: string } {
-  if (value === undefined || value.trim() === "") return { mode: "system" };
+): { mode: "direct" } | { mode: "fixed_servers"; proxyRules: string } {
+  if (value === undefined || value.trim() === "") return { mode: "direct" };
   try {
     const url = new URL(value);
     const loopback = url.hostname === "127.0.0.1" ||
