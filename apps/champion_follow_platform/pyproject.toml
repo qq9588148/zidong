@@ -35,4 +35,7 @@ champion_follow = ["sql/*.sql"]
 testpaths = ["tests"]
 addopts = "-ra"
 asyncio_mode = "auto"
-markers = ["integration: requires the local PostgreSQL test database"]
+markers = [
+  "integration: requires the local PostgreSQL test database",
+  "e2e: requires the isolated pilot stack",
+]

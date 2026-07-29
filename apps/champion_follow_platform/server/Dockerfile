@@ -12,5 +12,7 @@ RUN python -m pip install --no-cache-dir .
 COPY server ./server
 RUN python -m pip install --no-cache-dir "./server[test]"
 
+COPY ops/migrations ./ops/migrations
+
 WORKDIR /opt/champion-follow/server
 CMD ["python", "-m", "uvicorn", "champion_follow_server.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
