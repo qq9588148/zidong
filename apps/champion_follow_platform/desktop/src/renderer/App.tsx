@@ -91,6 +91,7 @@ const executionBlockLabels = {
   STARTUP_SYNC_REQUIRED: "等待页面、信号和金额链完成安全同步",
   SERVER_GLOBAL_STOP: "服务器全局停止已开启",
   SAFETY_SYNC_UNAVAILABLE: "服务器安全状态暂时无法确认",
+  PILOT_LIMIT_REACHED: "首次实测已完成 1 单，自动执行已停止",
 } as const;
 
 export function App() {

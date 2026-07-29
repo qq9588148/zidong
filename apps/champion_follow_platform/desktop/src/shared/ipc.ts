@@ -1,7 +1,8 @@
 export type ExecutionBlock =
   | "STARTUP_SYNC_REQUIRED"
   | "SERVER_GLOBAL_STOP"
-  | "SAFETY_SYNC_UNAVAILABLE";
+  | "SAFETY_SYNC_UNAVAILABLE"
+  | "PILOT_LIMIT_REACHED";
 
 export type RuntimeState = {
   generation: string;

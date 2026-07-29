@@ -40,4 +40,37 @@ describe("JsonExecutionStore", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("persists the confirmed-order count across restarts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "champion-follow-execution-count-"));
+    const path = join(directory, "executions.json");
+    try {
+      const store = new JsonExecutionStore(path);
+      await store.put({
+        state: "CONFIRMED",
+        order: {
+          clientOrderId: "00000000-0000-4000-8000-000000000011",
+          generation: "00000000-0000-4000-8000-000000000012",
+          taskId: "00000000-0000-4000-8000-000000000013",
+          deviceId: "00000000-0000-4000-8000-000000000014",
+          periodId: "2607290002",
+          taskRevision: 1,
+          position: 1,
+          direction: "ODD",
+          stakeFen: 100n,
+          expectedOddsMicros: 1_960_000,
+        },
+        result: {
+          state: "CONFIRMED",
+          platformOrderRef: `sha256:${"b".repeat(64)}`,
+          confirmedAt: "2026-07-29T04:01:00.000000Z",
+          durationMs: 100,
+        },
+      });
+
+      expect(await new JsonExecutionStore(path).confirmedOrderCount()).toBe(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });

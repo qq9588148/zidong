@@ -44,6 +44,7 @@ type RuntimeOptions = {
   helper: NativeHelper;
   journalDirectory: string;
   generation: () => string;
+  maxConfirmedOrders?: number | null;
 };
 
 export class DesktopExecutionRuntime {
@@ -67,6 +68,7 @@ export class DesktopExecutionRuntime {
   private deviceSyncVerified = false;
   private nextDeviceSyncMonotonicMs = 0;
   private tickInFlight = false;
+  private confirmedOrders = 0;
 
   constructor(private readonly options: RuntimeOptions) {}
 
@@ -86,6 +88,7 @@ export class DesktopExecutionRuntime {
 
   canEnable(): boolean {
     return this.initialized &&
+      !this.pilotLimitReached() &&
       this.deviceSyncVerified &&
       !this.globalStopEnabled &&
       this.options.auth.viewState().status === "ONLINE" &&
@@ -116,6 +119,7 @@ export class DesktopExecutionRuntime {
       return "SAFETY_SYNC_UNAVAILABLE";
     }
     if (this.globalStopEnabled) return "SERVER_GLOBAL_STOP";
+    if (this.pilotLimitReached()) return "PILOT_LIMIT_REACHED";
     return this.canEnable() ? null : "STARTUP_SYNC_REQUIRED";
   }
 
@@ -166,6 +170,7 @@ export class DesktopExecutionRuntime {
       this.executionStore = new JsonExecutionStore(
         join(this.options.journalDirectory, "executions.json"),
       );
+      this.confirmedOrders = await this.executionStore.confirmedOrderCount();
       this.bankrollStore = new BankrollStore(
         join(this.options.journalDirectory, "bankroll.json"),
       );
@@ -338,6 +343,12 @@ export class DesktopExecutionRuntime {
   private async afterExecution(record: ExecutionRecord): Promise<void> {
     if (record.state === "CONFIRMED") {
       this.pendingSettlement = record;
+      this.confirmedOrders += 1;
+      if (this.pilotLimitReached()) {
+        this.enabled = false;
+        this.scheduler?.stop();
+        this.lastTaskKey = null;
+      }
       return;
     }
     if (record.state === "UNKNOWN" && this.bankroll && this.bankrollStore) {
@@ -415,6 +426,11 @@ export class DesktopExecutionRuntime {
       frozen_reason: this.bankroll.status === "FROZEN_UNKNOWN_SETTLEMENT"
         ? "UNKNOWN_SETTLEMENT" : null,
     });
+  }
+
+  private pilotLimitReached(): boolean {
+    const maximum = this.options.maxConfirmedOrders ?? null;
+    return maximum !== null && this.confirmedOrders >= maximum;
   }
 }
 

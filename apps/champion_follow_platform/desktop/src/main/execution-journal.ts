@@ -41,6 +41,13 @@ export class JsonExecutionStore implements ExecutionStore {
     return [...this.records.values()].some((record) => record.state === "UNKNOWN");
   }
 
+  async confirmedOrderCount(): Promise<number> {
+    await this.load();
+    return [...this.records.values()].filter((record) =>
+      record.state === "CONFIRMED" || record.state === "SETTLED"
+    ).length;
+  }
+
   async unsettledConfirmed(): Promise<ExecutionRecord | null> {
     await this.load();
     const record = [...this.records.values()].find((item) =>

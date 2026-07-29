@@ -7,6 +7,7 @@ import { registerClientIpc } from "./ipc-handlers";
 import { createNativeHelper } from "./native-helper-runtime";
 import { desktopPaths } from "./paths";
 import { DesktopExecutionRuntime } from "./execution-runtime";
+import { pilotMaxConfirmedOrdersFromArgs } from "./pilot-gate";
 import { ReadonlySignalFeed } from "./signal-feed";
 import { TrustedTaskSigningKeys } from "./task-contract";
 import {
@@ -143,6 +144,7 @@ if (process.env.VITEST !== "true" && app) {
         helper,
         journalDirectory: desktopPaths().journal,
         generation: () => controller.getState().generation,
+        maxConfirmedOrders: pilotMaxConfirmedOrdersFromArgs(process.argv),
       });
       controller = new AppController(authClient, signalFeed, executionRuntime);
       registerAppIpc(controller);
