@@ -81,3 +81,34 @@ async def test_processing_coordinator_serializes_one_namespace():
     )
 
     assert maximum == 1
+
+
+@pytest.mark.asyncio
+async def test_processing_coordinator_limits_each_catchup_batch():
+    built = []
+
+    class Issues:
+        async def finalized_pending_issues(self, _namespace_id):
+            return tuple(f"260729{issue:04d}" for issue in range(1, 13))
+
+    class Builder:
+        async def build_issue(self, _namespace_id, issue):
+            built.append(issue)
+
+    class Causal:
+        async def process_ready(self, *, namespace_version):
+            return (namespace_version,)
+
+    coordinator = ProcessingCoordinator(
+        pool=object(),
+        issues=Issues(),
+        builder=Builder(),
+        causal=Causal(),
+    )
+
+    await coordinator.process(
+        namespace_id="namespace-id",
+        namespace_version="actor-hmac-v1",
+    )
+
+    assert built == [f"260729{issue:04d}" for issue in range(1, 11)]

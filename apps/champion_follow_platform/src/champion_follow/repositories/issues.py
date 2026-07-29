@@ -33,10 +33,15 @@ class IssueRepository:
                     "SELECT ie.issue FROM issue_evaluations AS ie "
                     "JOIN game_issues AS gi ON gi.issue=ie.issue "
                     "WHERE ie.namespace_id=%s AND ie.integrity_status='pending' "
-                    "AND EXISTS(SELECT 1 FROM source_events AS event "
+                    "AND (EXISTS(SELECT 1 FROM source_events AS event "
                     "WHERE event.namespace_id=ie.namespace_id "
                     "AND event.issue=ie.issue AND event.partition='current' "
-                    "AND event.kind='issue_status') "
+                    "AND event.kind='issue_status') OR gi.issue_no<("
+                    "SELECT COALESCE(MAX(later_issue.issue_no),0) "
+                    "FROM source_events AS marker "
+                    "JOIN game_issues AS later_issue ON later_issue.issue=marker.issue "
+                    "WHERE marker.namespace_id=ie.namespace_id "
+                    "AND marker.partition='current' AND marker.kind='issue_status')) "
                     "ORDER BY gi.issue_no",
                     (namespace_id,),
                 )

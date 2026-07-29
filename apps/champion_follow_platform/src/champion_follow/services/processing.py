@@ -6,6 +6,8 @@ from champion_follow.services.issue_builder import IssueBuilder
 
 
 class ProcessingCoordinator:
+    BATCH_LIMIT = 10
+
     def __init__(
         self,
         pool,
@@ -23,7 +25,8 @@ class ProcessingCoordinator:
     async def process(self, *, namespace_id, namespace_version):
         lock = self._locks.setdefault(namespace_id, asyncio.Lock())
         async with lock:
-            for issue in await self.issues.finalized_pending_issues(namespace_id):
+            pending = await self.issues.finalized_pending_issues(namespace_id)
+            for issue in pending[: self.BATCH_LIMIT]:
                 await self.builder.build_issue(namespace_id, issue)
             return await self.causal.process_ready(
                 namespace_version=namespace_version
