@@ -2,10 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import {
   installRoomHook,
+  LiveCaptureMode,
   readBtcffcPageState,
 } from "../src/bridge/page-hook.js";
 
 describe("public room hook", () => {
+  it("chooses exactly one live capture source for the page lifetime", () => {
+    const sdkFirst = new LiveCaptureMode();
+    expect(sdkFirst.claimSdk()).toBe(true);
+    expect(sdkFirst.claimDom()).toBe(false);
+    expect(sdkFirst.claimSdk()).toBe(true);
+
+    const domFirst = new LiveCaptureMode();
+    expect(domFirst.claimDom()).toBe(true);
+    expect(domFirst.claimSdk()).toBe(false);
+    expect(domFirst.claimDom()).toBe(true);
+  });
+
   it("exports only the current Btcffc issue, countdown, and phase", () => {
     expect(
       readBtcffcPageState([

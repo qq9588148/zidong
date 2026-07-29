@@ -1,3 +1,8 @@
+import {
+  publicBetCommandElements,
+  publicBetMessageFromElement,
+} from "./dom-public-room.js";
+
 const MARKER = "champion-follow-public-room-v1";
 
 type MessageHandler = (messages: unknown[], ...args: unknown[]) => unknown;
@@ -22,6 +27,26 @@ let mounted: Room | null = null;
 let mountedOptions: CallbackOptions | null = null;
 let mountedOriginal: MessageHandler | null = null;
 let mountedWrapper: MessageHandler | null = null;
+
+export class LiveCaptureMode {
+  private mode: "UNDECIDED" | "SDK" | "DOM" = "UNDECIDED";
+
+  claimSdk(): boolean {
+    if (this.mode === "DOM") return false;
+    this.mode = "SDK";
+    return true;
+  }
+
+  claimDom(): boolean {
+    if (this.mode === "SDK") return false;
+    this.mode = "DOM";
+    return true;
+  }
+
+  sdkSelected(): boolean {
+    return this.mode === "SDK";
+  }
+}
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -132,8 +157,8 @@ function currentRoom(): Room | undefined {
   return (window as unknown as { chatroom?: Room }).chatroom;
 }
 
-function installCurrentRoom(): void {
-  installRoomHook(currentRoom(), (payload) => emit("messages", payload));
+function installCurrentRoom(onMessages: EmitMessages): void {
+  installRoomHook(currentRoom(), onMessages);
 }
 
 function currentPageState(): BtcffcPageState | null {
@@ -157,6 +182,57 @@ function currentPageState(): BtcffcPageState | null {
 
 if (typeof window !== "undefined") {
   let lastState = "";
+  let ticksWithoutRoom = 0;
+  let domObserver: MutationObserver | null = null;
+  let domNonce = 0;
+  const domSeen = new WeakSet<Element>();
+  const liveCaptureMode = new LiveCaptureMode();
+
+  const stopDomFallback = (): void => {
+    domObserver?.disconnect();
+    domObserver = null;
+  };
+  const captureNewDomBets = (): void => {
+    const state = currentPageState();
+    if (!state) return;
+    const messages = [];
+    for (const element of publicBetCommandElements(document)) {
+      if (domSeen.has(element)) continue;
+      const message = publicBetMessageFromElement(
+        element,
+        state.issue,
+        Date.now(),
+        ++domNonce,
+      );
+      if (message === null) continue;
+      domSeen.add(element);
+      messages.push(message);
+    }
+    for (let offset = 0; offset < messages.length; offset += 100) {
+      emit("messages", {
+        origin: "realtime",
+        messages: messages.slice(offset, offset + 100),
+      });
+    }
+  };
+  const startDomFallback = (): void => {
+    if (domObserver !== null || !document.body ||
+        !liveCaptureMode.claimDom()) return;
+    for (const element of publicBetCommandElements(document)) domSeen.add(element);
+    domObserver = new MutationObserver(() => queueMicrotask(captureNewDomBets));
+    domObserver.observe(document.body, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  };
+
+  const emitSdkMessages: EmitMessages = (payload): void => {
+    if (!liveCaptureMode.claimSdk()) return;
+    stopDomFallback();
+    emit("messages", payload);
+  };
+
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== location.origin) return;
     const data = event.data as {
@@ -200,12 +276,19 @@ if (typeof window !== "undefined") {
     });
   });
   setInterval(() => {
-    installCurrentRoom();
+    installCurrentRoom(emitSdkMessages);
+    if (liveCaptureMode.sdkSelected()) {
+      ticksWithoutRoom = 0;
+      stopDomFallback();
+    } else {
+      ticksWithoutRoom += 1;
+      if (ticksWithoutRoom >= 20) startDomFallback();
+    }
     const state = currentPageState();
     const serialized = state ? JSON.stringify(state) : "";
     if (!state || serialized === lastState) return;
     lastState = serialized;
     emit("state", state);
   }, 100);
-  installCurrentRoom();
+  installCurrentRoom(emitSdkMessages);
 }
