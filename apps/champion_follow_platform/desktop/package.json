@@ -15,7 +15,8 @@
     "test:unit": "vitest run tests/unit",
     "start": "npm run build && electron .",
     "dist:win:dir": "npm run build && electron-builder --win dir --x64",
-    "dist:win:portable": "npm run build && electron-builder --win portable --x64"
+    "dist:win:portable": "npm run build && electron-builder --win portable --x64",
+    "dist:win:installer": "npm run build && electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@vitejs/plugin-react": "6.0.4",
@@ -69,11 +70,20 @@
     "win": {
       "target": [
         "dir",
-        "portable"
+        "portable",
+        "nsis"
       ]
     },
     "portable": {
       "artifactName": "Champion-Follow-Portable-${version}.${ext}"
+    },
+    "nsis": {
+      "artifactName": "Champion-Follow-Setup-${version}.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   }
 }

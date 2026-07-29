@@ -143,6 +143,9 @@ describe("collector Electron window policy", () => {
       mode: "fixed_servers",
       proxyRules: "http=127.0.0.1:25378;https=127.0.0.1:25378",
     });
+    expect(detectedSession.setProxy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ proxyBypassRules: expect.anything() }),
+    );
     await expect(configureCollectorSession(
       { ...proxiedSession, setProxy: vi.fn(async () => undefined) } as never,
       "142.0.7444.175",

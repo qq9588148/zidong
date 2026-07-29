@@ -21,6 +21,7 @@ describe("dedicated Chrome controller", () => {
     expect(args).toContain("--proxy-server=http://127.0.0.1:25378");
     expect(args.at(-1)).toBe("https://ng888.com/");
     expect(args.join(" ")).not.toMatch(/password|cookie|token/i);
+    expect(args.join(" ")).not.toMatch(/proxy-bypass-list|host-resolver-rules/i);
   });
 
   it("parses only a loopback DevTools endpoint", () => {
@@ -69,6 +70,12 @@ describe("dedicated Chrome controller", () => {
     expect(packageJson.build.extraResources).toContainEqual({
       from: "runtime/chrome/chrome-win64",
       to: "chrome",
+    });
+    expect(packageJson.build.win.target).toContain("nsis");
+    expect(packageJson.build.nsis).toMatchObject({
+      oneClick: false,
+      allowToChangeInstallationDirectory: true,
+      createDesktopShortcut: true,
     });
     expect(runtime).toMatchObject({
       version: "151.0.7922.47",
