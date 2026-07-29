@@ -6,6 +6,7 @@ from .markets import DIRECTION_FAMILY, Direction, settle_direction
 
 SAFE_REASON = re.compile(r"^[a-z0-9_]+$")
 MONEY_KINDS = {"bet", "cancel"}
+RESULT_CLOSE_CLOCK_SKEW_MS = 250
 
 
 @dataclass(frozen=True)
@@ -135,9 +136,21 @@ def evaluate_issue(issue, events, *, unresolved_gap):
     ):
         reasons.add("money_after_close")
     if closed_ms is not None and result_ms is not None and result_ms < closed_ms:
-        reasons.add("result_before_close")
-        result_ms = None
-        result_digits = None
+        money_after_result = any(
+            event.issue == issue
+            and event.kind in MONEY_KINDS
+            and event.source_ms > result_ms
+            for event in ordered
+        )
+        if (
+            closed_ms - result_ms <= RESULT_CLOSE_CLOCK_SKEW_MS
+            and not money_after_result
+        ):
+            closed_ms = result_ms
+        else:
+            reasons.add("result_before_close")
+            result_ms = None
+            result_digits = None
 
     selected = []
     by_actor_market = {}

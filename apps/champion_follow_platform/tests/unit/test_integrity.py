@@ -183,7 +183,7 @@ def test_over_cancel_missing_close_and_result_order_fail_closed():
     )
     result_before_close = evaluate_issue(
         "2607270001",
-        [ev("b", "bet"), result(200), close(250)],
+        [ev("b", "bet"), result(200), close(500)],
         unresolved_gap=False,
     )
 
@@ -192,6 +192,33 @@ def test_over_cancel_missing_close_and_result_order_fail_closed():
     assert "result_before_close" in result_before_close.reasons
     assert result_before_close.result_ms is None
     assert result_before_close.result_digits is None
+
+
+def test_small_result_close_clock_skew_is_normalized_when_money_precedes_result():
+    evaluation = evaluate_issue(
+        "2607270001",
+        [ev("b", "bet", time=100), result(200), close(250)],
+        unresolved_gap=False,
+    )
+
+    assert evaluation.complete
+    assert evaluation.reasons == ()
+    assert evaluation.closed_ms == 200
+    assert evaluation.result_ms == 200
+    assert len(evaluation.predictions) == 1
+
+
+def test_small_result_close_clock_skew_still_fails_when_money_follows_result():
+    evaluation = evaluate_issue(
+        "2607270001",
+        [result(200), ev("b", "bet", time=225), close(250)],
+        unresolved_gap=False,
+    )
+
+    assert not evaluation.complete
+    assert "result_before_close" in evaluation.reasons
+    assert evaluation.result_ms is None
+    assert evaluation.result_digits is None
 
 
 def test_money_after_close_is_rejected_before_negative_lead_can_be_persisted():
