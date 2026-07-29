@@ -6,3 +6,5 @@ npm-debug.log*
 native/**/bin/
 native/**/obj/
 test-results/
+runtime/chrome/
+runtime/*.zip

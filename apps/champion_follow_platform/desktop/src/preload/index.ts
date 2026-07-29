@@ -74,6 +74,13 @@ const api = Object.freeze({
   }>,
   openPlatformLogin: (): Promise<{ ok: true; open: true }> =>
     ipcRenderer.invoke("champion:open-platform-login") as Promise<{ ok: true; open: true }>,
+  openPlatformAddress: (value: string): Promise<
+    | { ok: true; open: true }
+    | { ok: false; code: "INVALID_ADDRESS" | "NAVIGATION_FAILED" }
+  > => ipcRenderer.invoke("champion:open-platform-address", value) as Promise<
+    | { ok: true; open: true }
+    | { ok: false; code: "INVALID_ADDRESS" | "NAVIGATION_FAILED" }
+  >,
   quitApp: (): Promise<{ ok: true }> =>
     ipcRenderer.invoke("champion:quit-app") as Promise<{ ok: true }>,
 });

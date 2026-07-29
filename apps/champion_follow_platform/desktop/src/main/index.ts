@@ -14,6 +14,7 @@ import {
   getLatestPlatformPageProbe,
   getPlatformSessionPersistenceState,
   isPlatformWindowOpen,
+  openNgPlatformAddress,
   openNgPlatformWindow,
   platformEndpointRegistry,
 } from "./platform-window";
@@ -59,9 +60,25 @@ function registerAppIpc(controller: AppController): void {
     probe: getLatestPlatformPageProbe(),
     session: getPlatformSessionPersistenceState(),
   }));
-  ipcMain.handle("champion:open-platform-login", () => {
-    openNgPlatformWindow();
-    return { ok: true, open: true };
+  ipcMain.handle("champion:open-platform-login", async () => {
+    await openNgPlatformWindow();
+    return { ok: true as const, open: true as const };
+  });
+  ipcMain.handle("champion:open-platform-address", async (_event, value: unknown) => {
+    if (typeof value !== "string") {
+      return { ok: false as const, code: "INVALID_ADDRESS" as const };
+    }
+    try {
+      await openNgPlatformAddress(value);
+      return { ok: true as const, open: true as const };
+    } catch (error) {
+      return {
+        ok: false as const,
+        code: error instanceof Error && error.message === "platform_address_invalid"
+          ? "INVALID_ADDRESS" as const
+          : "NAVIGATION_FAILED" as const,
+      };
+    }
   });
   ipcMain.handle("champion:quit-app", () => {
     appIsQuitting = true;
@@ -143,7 +160,7 @@ if (process.env.VITEST !== "true" && app) {
         } catch {
           // A missing backend override keeps the built-in HTTPS endpoint.
         }
-        openNgPlatformWindow();
+        void openNgPlatformWindow().catch(() => undefined);
       });
       app.on("activate", () => openMainWindow());
     });

@@ -5,6 +5,7 @@ import {
   clearPlatformSession,
   configurePlatformSession,
   isAllowedPlatformNavigation,
+  isSecureManualPlatformNavigation,
   platformPartition,
   platformUserAgent,
   platformWebPreferences,
@@ -41,6 +42,18 @@ describe("platform session", () => {
     expect(isAllowedPlatformNavigation(
       "http://platform.invalid/game",
       "https://platform.invalid",
+    )).toBe(false);
+  });
+
+  it("allows a customer-entered HTTPS address and its secure random redirect", () => {
+    expect(isSecureManualPlatformNavigation("https://ng888.com/")).toBe(true);
+    expect(isSecureManualPlatformNavigation(
+      "https://random-entry.example/game",
+    )).toBe(true);
+    expect(isSecureManualPlatformNavigation("http://ng888.com/")).toBe(false);
+    expect(isSecureManualPlatformNavigation("file:///C:/private.txt")).toBe(false);
+    expect(isSecureManualPlatformNavigation(
+      "https://user:pass@ng888.com/",
     )).toBe(false);
   });
 

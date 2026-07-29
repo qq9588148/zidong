@@ -1,14 +1,13 @@
 import { performance } from "node:perf_hooks";
 
-import type { BrowserWindow } from "electron";
-
 import type {
   FrozenOrder,
   PlatformBridge,
   RawConfirmation,
   RawSubmission,
 } from "./platform-adapter";
-import { getPlatformBrowserWindow } from "./platform-window";
+import type { ChromeBrowserController } from "./chrome-controller";
+import { getPlatformPageController } from "./platform-window";
 
 type PageState = {
   periodId: string;
@@ -34,8 +33,8 @@ export class NgPlatformBridge implements PlatformBridge {
   }
 
   async readState(): Promise<unknown> {
-    const window = requiredWindow();
-    const page = await evaluate<PageState>(window, readPageStateScript());
+    const pageController = requiredPage();
+    const page = await evaluate<PageState>(pageController, readPageStateScript());
     const odds: Record<string, 1_960_000> = {};
     for (let position = 1; position <= 5; position += 1) {
       for (const direction of Object.keys(directionLabels)) {
@@ -54,31 +53,31 @@ export class NgPlatformBridge implements PlatformBridge {
   }
 
   async submit(order: FrozenOrder): Promise<RawSubmission> {
-    const window = requiredWindow();
+    const pageController = requiredPage();
     const started = this.monotonicNow();
-    const baseline = await evaluate<number>(window, publicCommandCountScript());
+    const baseline = await evaluate<number>(pageController, publicCommandCountScript());
 
-    const opened = await evaluate<boolean>(window, openBetPanelScript());
-    if (!opened || !await waitFor(window, betPanelReadyScript(), Boolean, 800)) {
+    const opened = await evaluate<boolean>(pageController, openBetPanelScript());
+    if (!opened || !await waitFor(pageController, betPanelReadyScript(), Boolean, 800)) {
       return { status: "REJECTED", reasonCode: "BET_PANEL_UNAVAILABLE" };
     }
 
-    const selected = await selectOrder(window, order);
+    const selected = await selectOrder(pageController, order);
     if (!selected) {
       return { status: "REJECTED", reasonCode: "BET_CONTROLS_MISMATCH" };
     }
 
-    const current = await evaluate<PageState>(window, readPageStateScript());
+    const current = await evaluate<PageState>(pageController, readPageStateScript());
     if (current.periodId !== order.periodId || current.phase !== "OPEN" ||
         current.countdownMs <= 0) {
       return { status: "REJECTED", reasonCode: "PERIOD_CLOSED" };
     }
 
-    const sent = await evaluate<boolean>(window, clickFinalBetScript());
+    const sent = await evaluate<boolean>(pageController, clickFinalBetScript());
     if (!sent) return { status: "REJECTED", reasonCode: "SUBMIT_CONTROL_MISMATCH" };
 
     const confirmation = await waitFor<ConfirmationProbe | null>(
-      window,
+      pageController,
       confirmationScript(order, baseline),
       (value: ConfirmationProbe | null) => value !== null,
       3_500,
@@ -91,8 +90,11 @@ export class NgPlatformBridge implements PlatformBridge {
   }
 
   async findOrder(order: FrozenOrder): Promise<RawConfirmation | null> {
-    const window = requiredWindow();
-    const reference = await evaluate<string | null>(window, findOrderScript(order));
+    const pageController = requiredPage();
+    const reference = await evaluate<string | null>(
+      pageController,
+      findOrderScript(order),
+    );
     return reference === null
       ? null
       : rawConfirmation(order, reference, this.monotonicNow(), this.monotonicNow());
@@ -100,51 +102,61 @@ export class NgPlatformBridge implements PlatformBridge {
 
   async readIssueResult(periodId: string): Promise<readonly number[] | null> {
     if (!/^\d{8,20}$/.test(periodId)) return null;
-    const window = requiredWindow();
-    return evaluate<readonly number[] | null>(window, issueResultScript(periodId));
+    const pageController = requiredPage();
+    return evaluate<readonly number[] | null>(
+      pageController,
+      issueResultScript(periodId),
+    );
   }
 }
 
-async function selectOrder(window: BrowserWindow, order: FrozenOrder): Promise<boolean> {
-  const ballDialog = await evaluate<boolean>(window, openBallDialogScript());
-  if (!ballDialog || !await waitFor(window, ballDialogReadyScript(), Boolean, 500)) {
+async function selectOrder(
+  pageController: ChromeBrowserController,
+  order: FrozenOrder,
+): Promise<boolean> {
+  const ballDialog = await evaluate<boolean>(pageController, openBallDialogScript());
+  if (!ballDialog || !await waitFor(
+    pageController,
+    ballDialogReadyScript(),
+    Boolean,
+    500,
+  )) {
     return false;
   }
   const ball = ballLabels[order.position];
-  if (!await evaluate<boolean>(window, selectBallScript(ball))) return false;
+  if (!await evaluate<boolean>(pageController, selectBallScript(ball))) return false;
   await delay(40);
-  return evaluate<boolean>(window, selectDirectionAndAmountScript(
+  return evaluate<boolean>(pageController, selectDirectionAndAmountScript(
     directionLabels[order.direction],
     fenToYuan(order.stakeFen),
     ball,
   ));
 }
 
-function requiredWindow(): BrowserWindow {
-  const window = getPlatformBrowserWindow();
-  if (window === null || window.isDestroyed() ||
-      window.webContents.isLoadingMainFrame()) {
+function requiredPage(): ChromeBrowserController {
+  const pageController = getPlatformPageController();
+  if (pageController === null || !pageController.isReady()) {
     throw new Error("platform_window_unavailable");
   }
-  return window;
+  return pageController;
 }
 
-async function evaluate<T>(window: BrowserWindow, code: string): Promise<T> {
-  return await window.webContents.executeJavaScriptInIsolatedWorld(
-    1002,
-    [{ code }],
-  ) as T;
+async function evaluate<T>(
+  pageController: ChromeBrowserController,
+  code: string,
+): Promise<T> {
+  return await pageController.evaluate<T>(code);
 }
 
 async function waitFor<T>(
-  window: BrowserWindow,
+  pageController: ChromeBrowserController,
   code: string,
   accept: (value: T) => boolean,
   timeoutMs: number,
 ): Promise<T | null> {
   const deadline = performance.now() + timeoutMs;
   do {
-    const value = await evaluate<T>(window, code);
+    const value = await evaluate<T>(pageController, code);
     if (accept(value)) return value;
     await delay(50);
   } while (performance.now() < deadline);

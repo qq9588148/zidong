@@ -66,6 +66,14 @@ h2 { margin: 10px 0 8px; font-size: 34px; }
 .platform-action:hover:not(:disabled) { filter: brightness(1.12); }
 .platform-action:focus-visible { outline: 3px solid #7fc2ff; outline-offset: 3px; }
 .platform-action:disabled { cursor: wait; opacity: .7; }
+.platform-actions { width: min(440px, 46%); display: grid; gap: 10px; }
+.platform-address-form { display: grid; gap: 7px; }
+.platform-address-form label { color: #9db5cc; font-size: 12px; font-weight: 650; }
+.platform-address-form > div { display: flex; gap: 8px; }
+.platform-address-form input { min-width: 0; flex: 1; min-height: 46px; padding: 9px 11px; border: 1px solid #315a7d; border-radius: 10px; color: #eef7ff; background: #071725; outline: none; }
+.platform-address-form input:focus { border-color: #5daaf0; box-shadow: 0 0 0 3px #2b86d72c; }
+.platform-address-form p { min-height: 18px; margin: 0; color: #8fabca; font-size: 12px; }
+.platform-action.secondary { justify-self: end; border-color: #34556f; background: #132b40; box-shadow: none; }
 
 footer { display: flex; align-items: center; gap: 10px; padding: 20px 4px 0; color: #55728e; font-size: 12px; }
 footer code { color: #8da9c4; }
@@ -81,6 +89,7 @@ footer code { color: #8da9c4; }
   .shield { display: none; }
   .account-card { grid-template-columns: 1fr; }
   .control-card, .platform-card { align-items: stretch; flex-direction: column; gap: 20px; }
+  .platform-actions { width: 100%; }
 }
 
 @media (max-width: 560px) {

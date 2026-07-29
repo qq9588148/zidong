@@ -141,7 +141,7 @@ export class DesktopExecutionRuntime {
           await this.options.auth.platformEndpointConfig(),
           keys,
         ) === "accepted") {
-          reopenNgPlatformWindow();
+          void reopenNgPlatformWindow().catch(() => undefined);
         }
       } catch {
         // No override means the built-in HTTPS endpoint remains authoritative.

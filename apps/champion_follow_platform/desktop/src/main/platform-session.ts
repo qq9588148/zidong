@@ -104,6 +104,26 @@ export function applyPlatformNavigationPolicy(
   webContents.on("will-redirect", guard);
 }
 
+export function applyManualPlatformNavigationPolicy(
+  webContents: WebContents,
+): void {
+  webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  const guard = (event: Electron.Event, target: string) => {
+    if (!isSecureManualPlatformNavigation(target)) event.preventDefault();
+  };
+  webContents.on("will-navigate", guard);
+  webContents.on("will-redirect", guard);
+}
+
+export function isSecureManualPlatformNavigation(target: string): boolean {
+  try {
+    const url = new URL(target);
+    return url.protocol === "https:" && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 export function isAllowedPlatformNavigation(
   target: string,
   allowedOrigins: string | readonly string[],

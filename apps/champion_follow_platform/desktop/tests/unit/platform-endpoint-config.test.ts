@@ -30,11 +30,11 @@ function signedConfig(overrides: Record<string, unknown> = {}): unknown {
 describe("platform endpoint configuration", () => {
   const signingKeys = TrustedTaskSigningKeys.fromResponse(signingKeysResponse);
 
-  it("defaults to the inspected ng1z HTTPS entry", () => {
+  it("defaults to the user-selected ng888 HTTPS entry", () => {
     expect(DEFAULT_PLATFORM_ENDPOINT_CONFIG).toEqual({
       configVersion: 1,
-      entryUrl: "https://ng1z.com/",
-      allowedOrigins: ["https://ng1z.com"],
+      entryUrl: "https://ng888.com/",
+      allowedOrigins: ["https://ng888.com"],
     });
   });
 

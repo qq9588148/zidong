@@ -29,19 +29,22 @@ export function resolveCollectorConfig(
 ): CollectorConfig {
   const configuredMode = environment.CHAMPION_COLLECTOR_MODE?.trim();
   const mode = configuredMode === undefined || configuredMode === "" ||
-      configuredMode === "local"
-    ? "local"
-    : configuredMode === "server"
+      configuredMode === "server"
       ? "server"
+      : configuredMode === "local"
+        ? "local"
       : null;
   if (mode === null) throw new Error("collector_config_invalid");
 
   const platformUrl = httpsUrl(
     environment.CHAMPION_PLATFORM_URL ??
-      (mode === "local" ? "https://ng888.com/" : undefined),
+      "https://ng888.com/",
   );
   const serverUrl = mode === "server"
-    ? httpsUrl(environment.CHAMPION_COLLECTOR_SERVER_URL)
+    ? httpsUrl(
+        environment.CHAMPION_COLLECTOR_SERVER_URL ??
+          "https://101.37.172.66:8443/",
+      )
     : null;
   return Object.freeze({ mode, platformUrl, serverUrl });
 }

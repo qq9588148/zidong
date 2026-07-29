@@ -6,15 +6,16 @@ import {
   resolveCollectorConfig,
 } from "../src/collector-mode.js";
 
-describe("collector local mode", () => {
-  it("defaults to local collection without requiring a server", () => {
+describe("collector startup mode", () => {
+  it("defaults the packaged main collector to the deployed server", () => {
     expect(resolveCollectorConfig({})).toEqual({
-      mode: "local",
+      mode: "server",
       platformUrl: "https://ng888.com/",
-      serverUrl: null,
+      serverUrl: "https://101.37.172.66:8443/",
     });
     expect(
       resolveCollectorConfig({
+        CHAMPION_COLLECTOR_MODE: "local",
         CHAMPION_PLATFORM_URL: "https://example.test/room",
       }),
     ).toEqual({
@@ -24,10 +25,7 @@ describe("collector local mode", () => {
     });
   });
 
-  it("requires explicit HTTPS endpoints when server upload is enabled", () => {
-    expect(() =>
-      resolveCollectorConfig({ CHAMPION_COLLECTOR_MODE: "server" }),
-    ).toThrow("collector_config_invalid");
+  it("allows safe explicit HTTPS endpoint overrides", () => {
     expect(() =>
       resolveCollectorConfig({
         CHAMPION_COLLECTOR_MODE: "server",

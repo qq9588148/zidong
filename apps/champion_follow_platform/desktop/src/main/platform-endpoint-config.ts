@@ -27,8 +27,8 @@ export type PlatformEndpointUpdateResult =
 export const DEFAULT_PLATFORM_ENDPOINT_CONFIG: PlatformEndpointConfig =
   freezeConfig({
     configVersion: 1,
-    entryUrl: "https://ng1z.com/",
-    allowedOrigins: ["https://ng1z.com"],
+    entryUrl: "https://ng888.com/",
+    allowedOrigins: ["https://ng888.com"],
   });
 
 export class PlatformEndpointRegistry {

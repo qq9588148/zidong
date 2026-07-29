@@ -107,6 +107,8 @@ export function App() {
     errorCode: null,
   });
   const [openingPlatform, setOpeningPlatform] = useState(false);
+  const [platformAddress, setPlatformAddress] = useState("ng888.com");
+  const [platformAddressMessage, setPlatformAddressMessage] = useState("");
   const [authorizationCode, setAuthorizationCode] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -223,6 +225,29 @@ export function App() {
     }
   };
 
+  const openPlatformAddress = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setOpeningPlatform(true);
+    setPlatformAddressMessage("");
+    try {
+      const open = window.championFollow.openPlatformAddress;
+      if (!open) throw new Error("NAVIGATION_UNAVAILABLE");
+      const result = await open(platformAddress);
+      if (result.ok) {
+        setPlatformOpen(result.open);
+        setPlatformAddressMessage("平台网址已在专用 Chrome 中打开，请登录并手动进入游戏。");
+      } else {
+        setPlatformAddressMessage(result.code === "INVALID_ADDRESS"
+          ? "请输入有效的 HTTPS 平台网址。"
+          : "网址暂时无法打开，请检查地址或网络后重试。");
+      }
+    } catch {
+      setPlatformAddressMessage("网址暂时无法打开，请检查地址或网络后重试。");
+    } finally {
+      setOpeningPlatform(false);
+    }
+  };
+
   const toggleAutoBet = async () => {
     setState(await window.championFollow.setAutoBet(state.autoBet !== "ON"));
   };
@@ -287,7 +312,7 @@ export function App() {
           <strong className={platformOpen ? "active" : "muted"}>
             {platformOpen ? "已打开" : "未打开"}
           </strong>
-          <span>独立内置 Chromium 会话 · 本机代理兼容</span>
+          <span>独立 Chrome 会话 · 登录资料与日常浏览器隔离</span>
         </article>
         <article className="status-card safety">
           <p>自动执行</p><strong>{state.autoBet === "ON" ? "已开启" : "关闭"}</strong>
@@ -374,7 +399,7 @@ export function App() {
         <div>
           <p className="section-label">NG 平台</p>
           <h3>手动登录平台</h3>
-          <p>入口由本机安全配置和已认证后台更新。账号、密码和验证码不会进入客户端日志。</p>
+          <p>客户自行输入网址、登录并进入“比特分分彩”；程序识别页面后自动开始工作。</p>
           <p>
             页面合同：{platformProbe?.contractReady
               ? "已完整识别（只读）"
@@ -397,14 +422,34 @@ export function App() {
                 : "正在检测"}
           </p>
         </div>
-        <button
-          className="platform-action"
-          type="button"
-          onClick={() => void openPlatformLogin()}
-          disabled={openingPlatform}
-        >
-          {openingPlatform ? "正在打开…" : platformOpen ? "显示 NG 窗口" : "打开 NG 平台登录"}
-        </button>
+        <div className="platform-actions">
+          <form className="platform-address-form" onSubmit={openPlatformAddress}>
+            <label htmlFor="platform-address">平台网址</label>
+            <div>
+              <input
+                id="platform-address"
+                value={platformAddress}
+                onChange={(event) => setPlatformAddress(event.target.value)}
+                placeholder="ng888.com"
+                autoComplete="off"
+                spellCheck={false}
+                required
+              />
+              <button className="platform-action" type="submit" disabled={openingPlatform}>
+                {openingPlatform ? "正在打开…" : "打开网址"}
+              </button>
+            </div>
+            <p role="status" aria-live="polite">{platformAddressMessage}</p>
+          </form>
+          <button
+            className="platform-action secondary"
+            type="button"
+            onClick={() => void openPlatformLogin()}
+            disabled={openingPlatform}
+          >
+            {platformOpen ? "显示专用 Chrome" : "打开默认网址"}
+          </button>
+        </div>
       </section>
 
       <section className="control-card">

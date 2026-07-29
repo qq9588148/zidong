@@ -15,9 +15,8 @@ import {
 
 import { CAPTURE_EVENT_CHUNK_LIMIT } from "./capture-pipeline.js";
 import {
-  btcFfcGameUrl,
+  collectorStartupEntryUrl,
   CollectorEntryStore,
-  clickBtcFfcEntry,
 } from "./collector-entry.js";
 import {
   LocalCollectorServer,
@@ -105,7 +104,10 @@ async function run(): Promise<void> {
   const entryStore = new CollectorEntryStore(
     join(runtimeRoot, "platform-entry.json"),
   );
-  let entryUrl = await entryStore.load(platformUrl);
+  const entryUrl = collectorStartupEntryUrl(
+    await entryStore.load(platformUrl),
+    platformUrl,
+  );
 
   const credentialStore = new CollectorCredentialStore(
     join(runtimeRoot, "collector-credential.enc"),
@@ -132,7 +134,6 @@ async function run(): Promise<void> {
   let historyRecoveryTask: Promise<void> | null = null;
   let navigationRecovery: NavigationRecoveryCoordinator | null = null;
   let statusTimer: ReturnType<typeof setInterval> | null = null;
-  let gameEntryTimer: ReturnType<typeof setInterval> | null = null;
   let captureStopped = false;
   let historyRequestNumber = 0;
   let historyCursorMs = Date.now() + 1;
@@ -401,8 +402,6 @@ async function run(): Promise<void> {
     captureStopped = true;
     if (statusTimer !== null) clearInterval(statusTimer);
     statusTimer = null;
-    if (gameEntryTimer !== null) clearInterval(gameEntryTimer);
-    gameEntryTimer = null;
     await navigationRecovery?.stop();
     await stopHistoryRecovery();
     await stopCollectorLoops();
@@ -665,35 +664,10 @@ async function run(): Promise<void> {
 
       void loadPlatformUntilAccepted(
         async () => {
-          try {
-            await window.loadURL(entryUrl);
-          } catch (error) {
-            if (entryUrl === platformUrl) throw error;
-            entryUrl = platformUrl;
-            await window.loadURL(entryUrl);
-          }
-          const directGameUrl = btcFfcGameUrl(window.webContents.getURL());
-          if (directGameUrl !== null &&
-              new URL(window.webContents.getURL()).pathname === "/home") {
-            await window.loadURL(directGameUrl).catch(() => undefined);
-          }
+          await window.loadURL(entryUrl);
           platformConnected = true;
           recordCaptureStatus("page_connected");
           updateTitle();
-          if (gameEntryTimer === null) {
-            const script = `(${clickBtcFfcEntry.toString()})(document)`;
-            gameEntryTimer = setInterval(() => {
-              if (window.isDestroyed() || cleaned) return;
-              const frames = [
-                window.webContents.mainFrame,
-                ...window.webContents.mainFrame.frames,
-              ];
-              for (const frame of frames) {
-                if (frame.isDestroyed()) continue;
-                void frame.executeJavaScript(script).catch(() => undefined);
-              }
-            }, 2_000);
-          }
         },
         () => !window.isDestroyed() && !cleaned,
         async (retryCount) => {

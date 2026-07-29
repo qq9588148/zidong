@@ -39,6 +39,42 @@ afterEach(() => {
 });
 
 describe("App registration state", () => {
+  it("lets the customer enter a platform address and opens it without auto-entering a game", async () => {
+    const openPlatformAddress = vi.fn(async () => ({
+      ok: true as const,
+      open: true as const,
+    }));
+    window.championFollow = {
+      getState: vi.fn(async () => ({
+        ...baseState,
+        connection: {
+          status: "ONLINE" as const,
+          registered: true,
+          username: "client-user",
+          deviceLabel: "90abcdef",
+          errorCode: null,
+        },
+      })),
+      register: vi.fn(),
+      login: vi.fn(),
+      setAutoBet: vi.fn(),
+      getPlatformWindowState: vi.fn(async () => emptyPlatformState),
+      openPlatformLogin: vi.fn(),
+      openPlatformAddress,
+      quitApp: vi.fn(),
+    };
+
+    render(<App />);
+
+    const address = await screen.findByLabelText("平台网址");
+    fireEvent.change(address, { target: { value: "ng888.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "打开网址" }));
+
+    expect(openPlatformAddress).toHaveBeenCalledWith("ng888.com");
+    expect(await screen.findByText(/请登录并手动进入游戏/))
+      .toBeVisible();
+  });
+
   it("shows one-time-code registration while execution remains locked", async () => {
     window.championFollow = {
       getState: vi.fn(async () => ({

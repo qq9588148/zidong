@@ -99,7 +99,12 @@ describe("collector Electron window policy", () => {
       setProxy: vi.fn(async () => undefined),
     };
 
-    await configureCollectorSession(fakeSession as never, "142.0.7444.175");
+    await configureCollectorSession(
+      fakeSession as never,
+      "142.0.7444.175",
+      undefined,
+      async () => false,
+    );
 
     expect(fakeSession.setProxy).toHaveBeenCalledWith({ mode: "system" });
     expect(fakeSession.setUserAgent).toHaveBeenCalledWith(
@@ -119,6 +124,22 @@ describe("collector Electron window policy", () => {
       "http://127.0.0.1:25378",
     );
     expect(proxiedSession.setProxy).toHaveBeenCalledWith({
+      mode: "fixed_servers",
+      proxyRules: "http=127.0.0.1:25378;https=127.0.0.1:25378",
+    });
+    const detectedSession = {
+      setUserAgent: vi.fn(),
+      setPermissionCheckHandler: vi.fn(),
+      on: vi.fn(),
+      setProxy: vi.fn(async () => undefined),
+    };
+    await configureCollectorSession(
+      detectedSession as never,
+      "142.0.7444.175",
+      undefined,
+      async () => true,
+    );
+    expect(detectedSession.setProxy).toHaveBeenCalledWith({
       mode: "fixed_servers",
       proxyRules: "http=127.0.0.1:25378;https=127.0.0.1:25378",
     });

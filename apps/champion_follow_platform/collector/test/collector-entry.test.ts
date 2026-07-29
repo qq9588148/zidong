@@ -2,12 +2,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
-  btcFfcGameUrl,
+  collectorStartupEntryUrl,
   CollectorEntryStore,
-  clickBtcFfcEntry,
   sanitizeCollectorEntryUrl,
 } from "../src/collector-entry.js";
 
@@ -18,9 +17,6 @@ describe("collector entry recovery", () => {
     expect(sanitizeCollectorEntryUrl("https://random.example/?token=secret"))
       .toBeNull();
     expect(sanitizeCollectorEntryUrl("http://random.example/game")).toBeNull();
-    expect(btcFfcGameUrl("https://random.example/home"))
-      .toBe("https://random.example/game");
-    expect(btcFfcGameUrl("https://user:pass@random.example/home")).toBeNull();
 
     const root = await mkdtemp(join(tmpdir(), "collector-entry-"));
     const path = join(root, "entry.json");
@@ -34,44 +30,19 @@ describe("collector entry recovery", () => {
     await rm(root, { recursive: true });
   });
 
-  it("waits for login and then clicks only the exact Btc FFC card", () => {
-    const loggedOut = {
-      body: { innerText: "请先登录或注册" },
-      querySelectorAll: () => [],
-    } as unknown as Document;
-    expect(clickBtcFfcEntry(loggedOut)).toBe("AUTH_REQUIRED");
-
-    const exactClick = vi.fn();
-    const otherClick = vi.fn();
-    const exact = {
-      textContent: "比特分分彩",
-      closest: () => ({ click: exactClick }),
-    };
-    const other = {
-      textContent: "分分彩",
-      closest: () => ({ click: otherClick }),
-    };
-    const loggedIn = {
-      body: { innerText: "大厅" },
-      querySelectorAll: () => [exact, other],
-    } as unknown as Document;
-    expect(clickBtcFfcEntry(loggedIn)).toBe("CLICKED");
-    expect(exactClick).toHaveBeenCalledOnce();
-    expect(otherClick).not.toHaveBeenCalled();
+  it("always starts from the configured platform entry", () => {
+    expect(collectorStartupEntryUrl(
+      "https://random.example/game",
+      "https://ng888.com/",
+    )).toBe("https://ng888.com/");
+    expect(collectorStartupEntryUrl(
+      "https://random.example/home",
+      "https://ng888.com/",
+    )).toBe("https://ng888.com/");
+    expect(collectorStartupEntryUrl(
+      "not-a-url",
+      "https://ng888.com/",
+    )).toBe("https://ng888.com/");
   });
 
-  it("opens the lobby before searching for the exact game card", () => {
-    const lobbyClick = vi.fn();
-    const lobby = {
-      textContent: "大厅",
-      closest: () => ({ click: lobbyClick }),
-    };
-    const sessionPage = {
-      body: { innerText: "会话" },
-      querySelectorAll: (selector: string) => selector === "*" ? [lobby] : [],
-    } as unknown as Document;
-
-    expect(clickBtcFfcEntry(sessionPage)).toBe("LOBBY_OPENED");
-    expect(lobbyClick).toHaveBeenCalledOnce();
-  });
 });

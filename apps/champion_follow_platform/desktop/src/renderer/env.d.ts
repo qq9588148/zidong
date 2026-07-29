@@ -113,6 +113,10 @@ interface Window {
       session: ChampionPlatformSessionState;
     }>;
     openPlatformLogin(): Promise<{ ok: true; open: true }>;
+    openPlatformAddress?(value: string): Promise<
+      | { ok: true; open: true }
+      | { ok: false; code: "INVALID_ADDRESS" | "NAVIGATION_FAILED" }
+    >;
     quitApp(): Promise<{ ok: true }>;
   };
 }
