@@ -65,6 +65,10 @@ function safeError(code: string): Error {
 
 function eventFingerprint(event: CapturedEvent): string {
   const { receivedAtMs: _receivedAtMs, source: _source, ...semantic } = event;
+  if (event.kind === "RESULT") {
+    const { sourceMs: _sourceMs, ...stableResult } = semantic;
+    return canonicalJson(stableResult);
+  }
   return canonicalJson(semantic);
 }
 
@@ -201,9 +205,39 @@ export class CollectorRuntime {
     ) {
       return Promise.reject(safeError("collector_page_state_invalid"));
     }
-    this.lastHeartbeat = { ...observation };
     return this.serialized(async () => {
       this.requireCaptureHealthy();
+      const previousIssue = this.currentBoundary?.issue;
+      if (
+        observation.phase === "BETTING" &&
+        previousIssue !== undefined &&
+        previousIssue !== issue
+      ) {
+        const previousClose = capturedEventSchema.parse({
+          kind: "CLOSE",
+          eventKey: createHash("sha256")
+            .update(canonicalJson({ kind: "CLOSE", issue: previousIssue }))
+            .digest("hex"),
+          issue: previousIssue,
+          sourceMs: observation.observedAtMs,
+          receivedAtMs: observation.observedAtMs,
+          source: "realtime",
+          parserVersion: "btcffc-1",
+          namespaceVersion: "actor-hmac-v1",
+        });
+        if (!this.seen.has(previousClose.eventKey)) {
+          await this.persistCaptured(previousClose);
+        }
+        if (this.backfilling && !this.historyDecidedIssues.has(previousIssue)) {
+          const gap = this.captureGap(
+            "history_anchor_missing",
+            previousClose,
+          );
+          if (!this.seen.has(gap.eventKey)) await this.appendCaptured(gap);
+          this.recoveredHistoryIssues.delete(previousIssue);
+          this.historyDecidedIssues.add(previousIssue);
+        }
+      }
       const trigger = capturedEventSchema.parse({
         kind: "CLOSE",
         eventKey: createHash("sha256")
@@ -224,6 +258,7 @@ export class CollectorRuntime {
         parserVersion: "btcffc-1",
         namespaceVersion: "actor-hmac-v1",
       });
+      this.lastHeartbeat = { ...observation };
       if (observation.phase === "BETTING") {
         if (this.currentBoundary?.issue !== issue) {
           await this.observeBoundary(trigger);
@@ -448,6 +483,15 @@ export class CollectorRuntime {
     await this.markMissingHistoryAnchor(this.currentBoundary);
   }
 
+  async abandonHistoryRecovery(): Promise<void> {
+    if (!this.remoteSession) throw safeError("collector_session_missing");
+    if (!this.backfilling) return;
+    if (!this.currentBoundary) {
+      throw safeError("collector_history_boundary_missing");
+    }
+    await this.markMissingHistoryAnchor(this.currentBoundary);
+  }
+
   private serialized<T>(operation: () => Promise<T>): Promise<T> {
     const next = this.ingestTail.then(operation, operation);
     this.ingestTail = next.then(
@@ -526,6 +570,23 @@ export class CollectorRuntime {
     this.finalStatusIssues.add(status.issue);
   }
 
+  private async appendPendingStatuses(): Promise<void> {
+    const events = this.journal.replay().map((row) => row.event);
+    for (const issue of [...this.closedIssues].sort()) {
+      if (
+        !this.resultIssues.has(issue) ||
+        !this.historyDecidedIssues.has(issue) ||
+        this.finalStatusIssues.has(issue)
+      ) {
+        continue;
+      }
+      const trigger = [...events]
+        .reverse()
+        .find((event) => event.issue === issue);
+      if (trigger) await this.appendStatus(trigger);
+    }
+  }
+
   private captureGap(
     reason: "journal_torn_tail" | "history_anchor_missing",
     trigger: CapturedEvent,
@@ -567,7 +628,6 @@ export class CollectorRuntime {
   ): Promise<void> {
     await this.serialized(async () => {
       let recoverySucceeded = recovered;
-      let statusTrigger = trigger;
       const closedBeforeRecovery =
         (this.lastHeartbeat.issue === issue &&
           this.lastHeartbeat.phase === "CLOSED") ||
@@ -578,7 +638,6 @@ export class CollectorRuntime {
         const gap = this.captureGap("history_anchor_missing", trigger);
         if (!this.seen.has(gap.eventKey)) await this.appendCaptured(gap);
         recoverySucceeded = false;
-        statusTrigger = gap;
       }
       if (anchor) this.anchorProofEvents.set(issue, anchor);
       if (recoverySucceeded) {
@@ -592,7 +651,7 @@ export class CollectorRuntime {
       this.backfilling = false;
       this.continuitySuspended = false;
       this.rebuildTracker();
-      await this.appendStatus(statusTrigger);
+      await this.appendPendingStatuses();
     });
   }
 

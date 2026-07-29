@@ -1,6 +1,14 @@
-import type { Session, WebContents } from "electron";
+import type {
+  Cookie,
+  Cookies,
+  CookiesSetDetails,
+  Session,
+  WebContents,
+} from "electron";
 
 const configuredSessions = new WeakMap<Session, Promise<void>>();
+const configuredCookieStores = new WeakSet<Cookies>();
+const COOKIE_RETENTION_SECONDS = 30 * 24 * 60 * 60;
 
 export const COLLECTOR_PARTITION =
   "persist:champion-follow-main-collector-v1" as const;
@@ -29,6 +37,45 @@ export function collectorUserAgent(chromiumVersion: string): string {
   ].join(" ");
 }
 
+export function cookiePersistenceDetails(
+  cookie: Cookie,
+  nowSeconds = Date.now() / 1_000,
+): CookiesSetDetails | null {
+  if (!cookie.session || !cookie.domain) return null;
+  const hostname = cookie.domain.replace(/^\./, "");
+  const path = cookie.path?.startsWith("/") ? cookie.path : "/";
+  try {
+    const url = new URL(`https://${hostname}${path}`);
+    if (url.hostname !== hostname) return null;
+    return {
+      url: url.toString(),
+      name: cookie.name,
+      value: cookie.value,
+      ...(cookie.hostOnly ? {} : { domain: cookie.domain }),
+      path,
+      ...(cookie.secure === undefined ? {} : { secure: cookie.secure }),
+      ...(cookie.httpOnly === undefined ? {} : { httpOnly: cookie.httpOnly }),
+      sameSite: cookie.sameSite,
+      expirationDate: Math.floor(nowSeconds) + COOKIE_RETENTION_SECONDS,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function installSessionCookiePersistence(cookies: Cookies): void {
+  if (configuredCookieStores.has(cookies)) return;
+  configuredCookieStores.add(cookies);
+  cookies.on("changed", (_event, cookie, _cause, removed) => {
+    if (removed) return;
+    const details = cookiePersistenceDetails(cookie);
+    if (details === null) return;
+    void cookies.set(details)
+      .then(() => cookies.flushStore())
+      .catch(() => undefined);
+  });
+}
+
 export async function configureCollectorSession(
   collectorSession: Session,
   chromiumVersion: string = process.versions.chrome,
@@ -42,6 +89,7 @@ export async function configureCollectorSession(
   );
   collectorSession.setPermissionCheckHandler(() => false);
   collectorSession.on("will-download", (event) => event.preventDefault());
+  installSessionCookiePersistence(collectorSession.cookies);
   const selectedProxy = proxyUrl?.trim() || undefined;
   const configured = collectorSession.setProxy(
     platformProxyConfiguration(selectedProxy, "collector_proxy_invalid"),

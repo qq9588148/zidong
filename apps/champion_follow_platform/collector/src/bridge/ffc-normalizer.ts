@@ -245,7 +245,10 @@ export async function createFfcNormalizer(
     return [
       capturedEventSchema.parse({
         kind: "RESULT",
-        eventKey: await eventKey(0),
+        eventKey: await digest(
+          "event",
+          `result|${result.issue}|${result.digits.join(",")}`,
+        ),
         digits: result.digits,
         ...common,
       }),

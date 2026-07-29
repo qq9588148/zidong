@@ -109,6 +109,20 @@ async function start(): Promise<void> {
     if (event.source !== window || event.origin !== location.origin) return;
     const data = record(event.data);
     if (data?.marker !== MARKER) return;
+    if (data.kind === "capture-mode") {
+      const payload = record(data.payload);
+      const mode = payload?.mode;
+      if (
+        !payload ||
+        Object.keys(payload).join(",") !== "mode" ||
+        (mode !== "SDK" && mode !== "DOM")
+      ) {
+        failClosed("capture_mode_invalid");
+        return;
+      }
+      await ipcRenderer.invoke("collector:capture-mode", { mode });
+      return;
+    }
     if (data.kind === "history-error") {
       const payload = record(data.payload);
       const requestId = String(payload?.requestId ?? "");

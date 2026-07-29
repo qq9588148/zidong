@@ -282,7 +282,7 @@ describe("HttpCollectorServer", () => {
       "https://collector.test/",
       `synthetic_${"x".repeat(48)}`,
       (async () => new Response("PRIVATE_RESPONSE", { status })) as typeof fetch,
-      (value) => observed.push(value),
+      (value, operation) => observed.push(`${operation}:${value}`),
     );
 
     await expect(
@@ -291,7 +291,7 @@ describe("HttpCollectorServer", () => {
         namespace_version: "actor-hmac-v1",
       }),
     ).rejects.toThrow(code);
-    expect(observed).toEqual([`http_${status}`]);
+    expect(observed).toEqual([`session:http_${status}`]);
   });
 
   it("maps transport failure without exposing its message", async () => {

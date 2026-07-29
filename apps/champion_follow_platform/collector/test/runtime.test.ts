@@ -315,6 +315,24 @@ describe("CollectorRuntime durability boundary", () => {
     ).toHaveLength(1);
   });
 
+  it("deduplicates one result observed at different DOM and SDK times", async () => {
+    const journal = new MemoryJournal();
+    const collector = runtime(journal);
+    const history = event("RESULT", { source: "history", sourceMs: 1_000 });
+    const live = capturedEventSchema.parse({
+      ...history,
+      source: "realtime",
+      sourceMs: 2_000,
+    });
+
+    await collector.ingest([history]);
+    await collector.ingest([live]);
+
+    expect(
+      journal.rows.filter((row) => row.event.eventKey === history.eventKey),
+    ).toHaveLength(1);
+  });
+
   it("fails closed when one event key is reused for different semantics", async () => {
     const journal = new MemoryJournal();
     const collector = runtime(journal);
@@ -410,6 +428,46 @@ describe("CollectorRuntime recovery", () => {
     expect(collector.completeness(ISSUE).reasons).toContain("result_missing");
   });
 
+  it("closes the prior issue when the page advances directly to the next betting issue", async () => {
+    const journal = new MemoryJournal();
+    const collector = runtime(journal);
+
+    await collector.observePageState({
+      issue: ISSUE,
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 3_000,
+    });
+    collector.markHistoryAnchorRecovered(ISSUE);
+    await collector.ingest([event("RESULT")]);
+
+    await collector.observePageState({
+      issue: "2607270002",
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 8_000,
+    });
+
+    expect(
+      journal.rows.filter(
+        (row) => row.event.kind === "CLOSE" && row.event.issue === ISSUE,
+      ),
+    ).toHaveLength(1);
+    expect(
+      journal.rows.filter(
+        (row) => row.event.kind === "ISSUE_STATUS" && row.event.issue === ISSUE,
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        event: expect.objectContaining({ complete: true, reasons: [] }),
+      }),
+    ]);
+    expect(collector.currentHeartbeat()).toMatchObject({
+      issue: "2607270002",
+      phase: "BETTING",
+    });
+  });
+
   it("stops retrying history after the observed issue closes", async () => {
     const collector = runtime();
     await collector.observePageState({
@@ -452,6 +510,48 @@ describe("CollectorRuntime recovery", () => {
           row.event.reason === "history_anchor_missing",
       ),
     ).toBe(true);
+  });
+
+  it("abandons an incompatible history source and resumes at the next boundary", async () => {
+    const journal = new MemoryJournal();
+    const collector = runtime(
+      journal,
+      server(session({
+        history_anchor_event_key: "f".repeat(64),
+        namespace_empty: false,
+      })),
+    );
+    await collector.reconcileSession();
+    await collector.observePageState({
+      issue: ISSUE,
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 3_000,
+    });
+
+    await collector.abandonHistoryRecovery();
+
+    expect(collector.completeness(ISSUE).reasons).toContain(
+      "history_anchor_missing",
+    );
+    const nextIssue = "2607270002";
+    await collector.observePageState({
+      issue: nextIssue,
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 8_000,
+    });
+    await collector.ingest([event("RESULT", { issue: nextIssue })]);
+    await collector.observePageState({
+      issue: "2607270003",
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 13_000,
+    });
+    expect(collector.completeness(nextIssue)).toEqual({
+      complete: true,
+      reasons: [],
+    });
   });
 
   it("keeps the issue incomplete when close arrives before a delayed history anchor", async () => {
@@ -498,6 +598,67 @@ describe("CollectorRuntime recovery", () => {
           row.event.reason === "history_anchor_missing",
       ),
     ).toBe(true);
+  });
+
+  it("marks crossed issues incomplete and carries continuity to the open issue", async () => {
+    const anchor = event("BET", { source: "history" });
+    const journal = new MemoryJournal();
+    const collector = runtime(
+      journal,
+      server(
+        session({
+          history_anchor_event_key: anchor.eventKey,
+          namespace_empty: false,
+        }),
+      ),
+    );
+    await collector.reconcileSession();
+    await collector.observePageState({
+      issue: ISSUE,
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 3_000,
+    });
+
+    let release!: () => void;
+    const pageReady = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const recovering = collector.recoverHistory(async () => {
+      await pageReady;
+      return historyPage([anchor]);
+    });
+    await collector.ingest([event("RESULT")]);
+    const nextIssue = "2607270002";
+    await collector.observePageState({
+      issue: nextIssue,
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 8_000,
+    });
+    release();
+    await recovering;
+
+    expect(collector.completeness(ISSUE).reasons).toContain(
+      "history_anchor_missing",
+    );
+    expect(
+      journal.rows.find(
+        (row) => row.event.kind === "ISSUE_STATUS" && row.event.issue === ISSUE,
+      )?.event,
+    ).toMatchObject({ complete: false });
+
+    await collector.ingest([event("RESULT", { issue: nextIssue })]);
+    await collector.observePageState({
+      issue: "2607270003",
+      phase: "BETTING",
+      countdownMs: 5_000,
+      observedAtMs: 13_000,
+    });
+    expect(collector.completeness(nextIssue)).toEqual({
+      complete: true,
+      reasons: [],
+    });
   });
 
   it("resumes upload after the persisted ACK without resending it", async () => {

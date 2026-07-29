@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createFfcNormalizer } from "../src/bridge/ffc-normalizer.js";
 import {
   publicBetMessageFromValues,
+  publicResultMessageFromValues,
 } from "../src/bridge/dom-public-room.js";
 
 describe("public room DOM fallback", () => {
@@ -55,6 +56,31 @@ describe("public room DOM fallback", () => {
       issue: "2607291223",
       observedAtMs: 1_785_340_801_001,
       nonce: 2,
+    })).toBeNull();
+  });
+
+  it("turns only an exact five-digit public result into the normalizer", async () => {
+    const message = publicResultMessageFromValues({
+      issue: "2607291389",
+      digits: [7, 8, 4, 7, 0],
+      observedAtMs: 1_785_340_802_000,
+    });
+    const normalize = await createFfcNormalizer(
+      new Uint8Array(32).fill(9),
+      () => 1_785_340_802_100,
+    );
+
+    expect(await normalize(message, "realtime")).toEqual([
+      expect.objectContaining({
+        kind: "RESULT",
+        issue: "2607291389",
+        digits: [7, 8, 4, 7, 0],
+      }),
+    ]);
+    expect(publicResultMessageFromValues({
+      issue: "2607291389",
+      digits: [7, 8, 4],
+      observedAtMs: 1_785_340_802_000,
     })).toBeNull();
   });
 });

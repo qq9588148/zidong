@@ -17,10 +17,10 @@ export function sanitizeCollectorEntryUrl(value: string): string | null {
 }
 
 export function collectorStartupEntryUrl(
-  _saved: string,
+  saved: string,
   fallback: string,
 ): string {
-  return fallback;
+  return sanitizeCollectorEntryUrl(saved) ?? fallback;
 }
 
 export class CollectorEntryStore {

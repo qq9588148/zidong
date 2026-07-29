@@ -223,4 +223,39 @@ describe("Btcffc normalizer", () => {
       digits: [1, 2, 3, 4, 5],
     });
   });
+
+  it("deduplicates the same public result across DOM and SDK sources", async () => {
+    const sdk = await normalize({
+      idClient: "sdk-result-id",
+      time: 1007,
+      text: {
+        ext: {
+          isRobot: "1",
+          ext: {
+            model: "Btcffc",
+            type: "4",
+            serial: "2607291318",
+            result: [5, 4, 3, 2, 1],
+          },
+        },
+      },
+    }, "history");
+    const dom = await normalize({
+      idClient: "dom-result|2607291318",
+      time: 2007,
+      text: {
+        ext: {
+          isRobot: "1",
+          ext: {
+            model: "Btcffc",
+            type: "4",
+            serial: "2607291318",
+            result: [5, 4, 3, 2, 1],
+          },
+        },
+      },
+    }, "realtime");
+
+    expect(dom[0]?.eventKey).toBe(sdk[0]?.eventKey);
+  });
 });

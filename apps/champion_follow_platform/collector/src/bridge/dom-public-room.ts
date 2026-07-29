@@ -18,6 +18,22 @@ type PublicBetMessage = {
   };
 };
 
+type PublicResultMessage = {
+  idClient: string;
+  time: number;
+  text: {
+    ext: {
+      isRobot: "1";
+      ext: {
+        model: "Btcffc";
+        type: "4";
+        serial: string;
+        result: number[];
+      };
+    };
+  };
+};
+
 const positionLabels: Record<string, string> = {
   "1": "第一球",
   "一": "第一球",
@@ -103,6 +119,62 @@ export function publicBetMessageFromValues(input: Readonly<{
             title: position,
             items: [{ title: direction, money: amount }],
           }],
+        },
+      },
+    },
+  };
+}
+
+export function publicResultMessageFromDocument(
+  document: Document,
+  observedAtMs: number,
+): PublicResultMessage | null {
+  const container = document.querySelector(".betResult-game");
+  if (!container) return null;
+  const label = compact(
+    container.querySelector(".betResult-span")?.textContent,
+  );
+  const issue = label.match(/^第(\d{8,16})期开奖$/)?.[1] ?? "";
+  const digitTexts = Array.from(
+    container.querySelectorAll(".betResult-style-game .bluestyle"),
+  ).map((element) => compact(element.textContent));
+  if (digitTexts.length !== 5 || digitTexts.some((value) => !/^\d$/.test(value))) {
+    return null;
+  }
+  return publicResultMessageFromValues({
+    issue,
+    digits: digitTexts.map(Number),
+    observedAtMs,
+  });
+}
+
+export function publicResultMessageFromValues(input: Readonly<{
+  issue: string;
+  digits: readonly number[];
+  observedAtMs: number;
+}>): PublicResultMessage | null {
+  if (
+    !/^\d{8,16}$/.test(input.issue) ||
+    input.digits.length !== 5 ||
+    input.digits.some(
+      (digit) => !Number.isInteger(digit) || digit < 0 || digit > 9,
+    ) ||
+    !Number.isSafeInteger(input.observedAtMs) ||
+    input.observedAtMs < 0
+  ) {
+    return null;
+  }
+  return {
+    idClient: `dom-result|${input.issue}`,
+    time: input.observedAtMs,
+    text: {
+      ext: {
+        isRobot: "1",
+        ext: {
+          model: "Btcffc",
+          type: "4",
+          serial: input.issue,
+          result: [...input.digits],
         },
       },
     },

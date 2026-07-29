@@ -4,6 +4,7 @@ import {
   COLLECTOR_PARTITION,
   collectorWebPreferences,
   configureCollectorSession,
+  cookiePersistenceDetails,
   denyPermissionRequest,
   denyWindowOpen,
   installCollectorWindowPolicy,
@@ -93,6 +94,11 @@ describe("collector Electron window policy", () => {
 
   it("uses a direct connection by default and accepts only an explicit loopback proxy", async () => {
     const fakeSession = {
+      cookies: {
+        on: vi.fn(),
+        set: vi.fn(async () => undefined),
+        flushStore: vi.fn(async () => undefined),
+      },
       setUserAgent: vi.fn(),
       setPermissionCheckHandler: vi.fn(),
       on: vi.fn(),
@@ -112,6 +118,11 @@ describe("collector Electron window policy", () => {
     );
 
     const proxiedSession = {
+      cookies: {
+        on: vi.fn(),
+        set: vi.fn(async () => undefined),
+        flushStore: vi.fn(async () => undefined),
+      },
       setUserAgent: vi.fn(),
       setPermissionCheckHandler: vi.fn(),
       on: vi.fn(),
@@ -134,6 +145,36 @@ describe("collector Electron window policy", () => {
       "142.0.7444.175",
       "http://proxy.example:25378",
     )).rejects.toThrow("collector_proxy_invalid");
+  });
+
+  it("converts secure session cookies into Chromium-managed persistent cookies", () => {
+    expect(cookiePersistenceDetails({
+      name: "session",
+      value: "synthetic-value",
+      domain: ".random-entry.example",
+      path: "/",
+      secure: true,
+      httpOnly: true,
+      sameSite: "no_restriction",
+      session: true,
+    }, 1_000)).toEqual({
+      url: "https://random-entry.example/",
+      name: "session",
+      value: "synthetic-value",
+      domain: ".random-entry.example",
+      path: "/",
+      secure: true,
+      httpOnly: true,
+      sameSite: "no_restriction",
+      expirationDate: 2_593_000,
+    });
+    expect(cookiePersistenceDetails({
+      name: "persistent",
+      value: "synthetic-value",
+      domain: "random-entry.example",
+      sameSite: "lax",
+      session: false,
+    }, 1_000)).toBeNull();
   });
 
   it("keeps retrying a transient initial page failure without exiting", async () => {

@@ -1,6 +1,7 @@
 import {
   publicBetCommandElements,
   publicBetMessageFromElement,
+  publicResultMessageFromDocument,
 } from "./dom-public-room.js";
 
 const MARKER = "champion-follow-public-room-v1";
@@ -45,6 +46,10 @@ export class LiveCaptureMode {
 
   sdkSelected(): boolean {
     return this.mode === "SDK";
+  }
+
+  domSelected(): boolean {
+    return this.mode === "DOM";
   }
 }
 
@@ -149,6 +154,16 @@ export function installRoomHook(room: Room | undefined, emit: EmitMessages): boo
   return true;
 }
 
+export function publicSystemMessages(messages: unknown[]): unknown[] {
+  return messages.filter((message) => {
+    const root = object(message);
+    const text = object(root?.text);
+    const outer = object(text?.ext);
+    const payload = object(outer?.ext);
+    return outer?.isRobot === "1" && String(payload?.type ?? "") === "2";
+  });
+}
+
 export function decodeHistoryMessages(
   room: Room | undefined,
   messages: unknown[],
@@ -202,7 +217,17 @@ if (typeof window !== "undefined") {
   let ticksWithoutRoom = 0;
   let domObserver: MutationObserver | null = null;
   let domNonce = 0;
+  let domSystemPollInFlight = false;
+  let domSystemPollTicks = 0;
+  let reportedLiveMode: "SDK" | "DOM" | null = null;
   const domSeen = new WeakSet<Element>();
+  const domResultIssues = new Set<string>();
+
+  const reportLiveMode = (mode: "SDK" | "DOM"): void => {
+    if (reportedLiveMode === mode) return;
+    reportedLiveMode = mode;
+    emit("capture-mode", { mode });
+  };
   const liveCaptureMode = new LiveCaptureMode();
 
   const stopDomFallback = (): void => {
@@ -232,21 +257,75 @@ if (typeof window !== "undefined") {
       });
     }
   };
+  const captureDomResult = (): void => {
+    const message = publicResultMessageFromDocument(document, Date.now());
+    const issue = message?.text.ext.ext.serial;
+    if (!message || !issue || domResultIssues.has(issue)) return;
+    domResultIssues.add(issue);
+    emit("messages", { origin: "realtime", messages: [message] });
+  };
   const startDomFallback = (): void => {
     if (domObserver !== null || !document.body ||
         !liveCaptureMode.claimDom()) return;
     for (const element of publicBetCommandElements(document)) domSeen.add(element);
-    domObserver = new MutationObserver(() => queueMicrotask(captureNewDomBets));
+    domObserver = new MutationObserver(() => queueMicrotask(() => {
+      captureNewDomBets();
+      captureDomResult();
+    }));
     domObserver.observe(document.body, {
       childList: true,
       characterData: true,
       subtree: true,
+    });
+    reportLiveMode("DOM");
+    captureDomResult();
+  };
+  const pollDomSystemMessages = (): void => {
+    if (!liveCaptureMode.domSelected() || domSystemPollInFlight) return;
+    const room = currentRoom();
+    if (typeof room?.getHistoryMsgs !== "function") return;
+    domSystemPollInFlight = true;
+    room.getHistoryMsgs({
+      timetag: Date.now() + 1,
+      limit: 100,
+      reverse: false,
+      msgTypes: ["text"],
+      done(error: unknown, result: { msgs?: unknown[] } | unknown[]) {
+        try {
+          if (error) return;
+          const envelope = object(result);
+          const messages = Array.isArray(result)
+            ? result
+            : Array.isArray(envelope?.msgs)
+              ? envelope.msgs
+              : [];
+          if (messages.length > 100) return;
+          stopDomFallback();
+          let decoded = false;
+          try {
+            decoded = decodeHistoryMessages(room, messages);
+          } finally {
+            startDomFallback();
+          }
+          if (!decoded) return;
+          const systemMessages = publicSystemMessages(messages);
+          if (systemMessages.length > 0) {
+            emit("messages", {
+              origin: "realtime",
+              messages: systemMessages,
+            });
+          }
+        } finally {
+          domSystemPollInFlight = false;
+        }
+      },
     });
   };
 
   const emitSdkMessages: EmitMessages = (payload): void => {
     if (!liveCaptureMode.claimSdk()) return;
     stopDomFallback();
+    reportLiveMode("SDK");
     emit("messages", payload);
   };
 
@@ -305,6 +384,16 @@ if (typeof window !== "undefined") {
     } else {
       ticksWithoutRoom += 1;
       if (ticksWithoutRoom >= 20) startDomFallback();
+    }
+    if (liveCaptureMode.domSelected()) {
+      captureDomResult();
+      domSystemPollTicks += 1;
+      if (domSystemPollTicks >= 20) {
+        domSystemPollTicks = 0;
+        pollDomSystemMessages();
+      }
+    } else {
+      domSystemPollTicks = 0;
     }
     const state = currentPageState();
     const serialized = state ? JSON.stringify(state) : "";

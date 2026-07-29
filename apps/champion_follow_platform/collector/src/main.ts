@@ -140,6 +140,8 @@ async function run(): Promise<void> {
   const historyBoundaries = new HistoryBoundaryTracker();
   let historyRecoveryStarted = false;
   let historyGeneration = 0;
+  let capturedEntryUrl: string | null = null;
+  let domCaptureGeneration: number | null = null;
   let cleaned = false;
   let pendingHistory:
     | {
@@ -403,6 +405,20 @@ async function run(): Promise<void> {
       });
   }
 
+  async function establishDomContinuity(generation: number): Promise<void> {
+    if (
+      captureStopped ||
+      domCaptureGeneration !== generation ||
+      navigationRecovery?.acceptsPageState(generation) !== true ||
+      requireRuntime().currentHeartbeat().issue === null
+    ) {
+      return;
+    }
+    await stopHistoryRecovery();
+    await requireRuntime().abandonHistoryRecovery();
+    navigationRecovery?.historyRecovered(generation);
+  }
+
   async function cleanupRuntime(): Promise<void> {
     if (cleaned) return;
     cleaned = true;
@@ -415,6 +431,7 @@ async function run(): Promise<void> {
     ipcMain.removeHandler("collector:identity");
     ipcMain.removeHandler("collector:append");
     ipcMain.removeHandler("collector:state");
+    ipcMain.removeHandler("collector:capture-mode");
     ipcMain.removeHandler("collector:history-page");
     ipcMain.removeAllListeners("collector:unsafe-state");
     ipcMain.removeAllListeners("collector:history-error");
@@ -463,7 +480,9 @@ async function run(): Promise<void> {
         config.serverUrl!,
         credential.bearer,
         fetch,
-        recordUploadStatus,
+        (status, operation) => {
+          if (operation === "events") recordUploadStatus(status);
+        },
       );
     },
     async openJournal() {
@@ -543,6 +562,7 @@ async function run(): Promise<void> {
           historyCursorMs = Date.now() + 1;
           historyBoundaries.reset();
           historyRecoveryStarted = false;
+          domCaptureGeneration = null;
         },
         async reconcileSession() {
           await requireRuntime().reconcileSession();
@@ -554,7 +574,10 @@ async function run(): Promise<void> {
           await waitForRetry(signal);
         },
         sessionReady(generation) {
-          if (collectorRuntime?.currentHeartbeat().phase === "BETTING") {
+          if (
+            domCaptureGeneration !== generation &&
+            collectorRuntime?.currentHeartbeat().phase === "BETTING"
+          ) {
             startHistoryRecovery(generation);
           }
         },
@@ -592,6 +615,29 @@ async function run(): Promise<void> {
         }
         return requireRuntime().ingest(strictCaptureBatch(value));
       });
+      ipcMain.handle("collector:capture-mode", async (event, value: unknown) => {
+        if (!validSender(event)) throw new Error("collector_ipc_rejected");
+        const generation = navigationRecovery?.currentGeneration ?? 0;
+        if (navigationRecovery?.acceptsPageState(generation) !== true) {
+          return journal.lastSeq;
+        }
+        const mode =
+          value !== null && typeof value === "object" && !Array.isArray(value)
+            ? (value as Record<string, unknown>).mode
+            : null;
+        if (
+          !value ||
+          Object.keys(value as Record<string, unknown>).join(",") !== "mode" ||
+          (mode !== "SDK" && mode !== "DOM")
+        ) {
+          throw new Error("collector_capture_mode_invalid");
+        }
+        if (mode === "DOM") {
+          domCaptureGeneration = generation;
+          await establishDomContinuity(generation);
+        }
+        return journal.lastSeq;
+      });
       ipcMain.handle("collector:state", async (event, value: unknown) => {
         if (!validSender(event)) throw new Error("collector_ipc_rejected");
         const generation = navigationRecovery?.currentGeneration ?? 0;
@@ -625,8 +671,20 @@ async function run(): Promise<void> {
           countdownMs,
           observedAtMs,
         });
+        const currentEntryUrl = window.webContents.getURL();
+        if (
+          capturedEntryUrl !== currentEntryUrl &&
+          await entryStore.save(currentEntryUrl)
+        ) {
+          capturedEntryUrl = currentEntryUrl;
+        }
+        if (domCaptureGeneration === generation) {
+          await establishDomContinuity(generation);
+        }
         recordCaptureStatus("capturing");
-        if (phase === "BETTING") startHistoryRecovery(generation);
+        if (phase === "BETTING" && domCaptureGeneration !== generation) {
+          startHistoryRecovery(generation);
+        }
         return sequence;
       });
       ipcMain.handle("collector:history-page", (event, value: unknown) => {

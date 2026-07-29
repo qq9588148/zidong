@@ -40,7 +40,10 @@ export class HttpCollectorServer implements CollectorServerPort {
     baseUrl: string,
     private readonly bearer: string,
     private readonly fetchImpl: typeof fetch = fetch,
-    private readonly observeStatus: (status: string) => void = () => undefined,
+    private readonly observeStatus: (
+      status: string,
+      operation: "session" | "events" | "heartbeat",
+    ) => void = () => undefined,
   ) {
     try {
       this.root = new URL(baseUrl);
@@ -56,7 +59,11 @@ export class HttpCollectorServer implements CollectorServerPort {
     collector_id: string;
     namespace_version: "actor-hmac-v1";
   }): Promise<CollectorSessionValue> {
-    const response = await this.call("/v1/collector/session", request);
+    const response = await this.call(
+      "/v1/collector/session",
+      request,
+      "session",
+    );
     const parsed = sessionResponseSchema.safeParse(response);
     if (!parsed.success) throw serverError();
     return parsed.data;
@@ -70,6 +77,7 @@ export class HttpCollectorServer implements CollectorServerPort {
     const response = await this.call(
       "/v1/collector/events",
       parsedRequest.data,
+      "events",
     );
     const parsedResponse = ackSchema.safeParse(response);
     if (!parsedResponse.success) throw serverError();
@@ -79,10 +87,14 @@ export class HttpCollectorServer implements CollectorServerPort {
   async heartbeat(value: Heartbeat): Promise<void> {
     const parsed = heartbeatSchema.safeParse(value);
     if (!parsed.success) throw serverError();
-    await this.call("/v1/collector/heartbeat", parsed.data);
+    await this.call("/v1/collector/heartbeat", parsed.data, "heartbeat");
   }
 
-  private async call(path: string, body: unknown): Promise<unknown> {
+  private async call(
+    path: string,
+    body: unknown,
+    operation: "session" | "events" | "heartbeat",
+  ): Promise<unknown> {
     let response: Response;
     try {
       response = await this.fetchImpl(new URL(path, this.root), {
@@ -97,10 +109,13 @@ export class HttpCollectorServer implements CollectorServerPort {
         ),
       });
     } catch {
-      this.observeStatus("network_error");
+      this.observeStatus("network_error", operation);
       throw new Error("collector_network_error");
     }
-    this.observeStatus(response.ok ? "ok" : `http_${response.status}`);
+    this.observeStatus(
+      response.ok ? "ok" : `http_${response.status}`,
+      operation,
+    );
     if (response.status === 401 || response.status === 403) {
       throw new Error("collector_auth_rejected");
     }

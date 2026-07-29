@@ -30,15 +30,15 @@ describe("collector entry recovery", () => {
     await rm(root, { recursive: true });
   });
 
-  it("always starts from the configured platform entry", () => {
+  it("resumes the last credential-free HTTPS page location", () => {
     expect(collectorStartupEntryUrl(
       "https://random.example/game",
       "https://ng888.com/",
-    )).toBe("https://ng888.com/");
+    )).toBe("https://random.example/game");
     expect(collectorStartupEntryUrl(
       "https://random.example/home",
       "https://ng888.com/",
-    )).toBe("https://ng888.com/");
+    )).toBe("https://random.example/home");
     expect(collectorStartupEntryUrl(
       "not-a-url",
       "https://ng888.com/",

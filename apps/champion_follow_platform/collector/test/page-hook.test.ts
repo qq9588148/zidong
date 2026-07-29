@@ -4,6 +4,7 @@ import {
   decodeHistoryMessages,
   installRoomHook,
   LiveCaptureMode,
+  publicSystemMessages,
   readBtcffcPageState,
 } from "../src/bridge/page-hook.js";
 
@@ -18,6 +19,22 @@ describe("public room hook", () => {
     expect(domFirst.claimDom()).toBe(true);
     expect(domFirst.claimSdk()).toBe(false);
     expect(domFirst.claimDom()).toBe(true);
+    expect(domFirst.domSelected()).toBe(true);
+  });
+
+  it("keeps only cancellation messages for DOM fallback polling", () => {
+    const message = (type: string) => ({
+      text: { ext: { isRobot: "1", ext: { model: "Btcffc", type } } },
+    });
+
+    expect(
+      publicSystemMessages([
+        message("1"),
+        message("2"),
+        message("4"),
+        { text: "encrypted" },
+      ]),
+    ).toEqual([message("2")]);
   });
 
   it("exports only the current Btcffc issue, countdown, and phase", () => {
