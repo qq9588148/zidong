@@ -15,6 +15,7 @@ const POSITIONS: Record<string, number> = {
   第五球: 5,
 };
 const SIDES = new Set(["大", "小", "单", "双", "质", "合"]);
+const FLAT_DOUBLE_PATTERN = /^猜双面-(第[一二三四五]球)_([大小单双质合])$/;
 
 function record(value: unknown): UnknownRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -53,10 +54,27 @@ function normalizedItems(payload: UnknownRecord): Array<{
   let itemIndex = 0;
   for (const rawGroup of groups) {
     const group = record(rawGroup);
-    const position = POSITIONS[String(group?.title ?? "")];
-    const items = Array.isArray(group?.items) ? group.items : [];
-    for (const rawItem of items) {
+    const flat = String(group?.title ?? "").match(FLAT_DOUBLE_PATTERN);
+    const flatAmountMinor = toMinor(group?.money);
+    const items = Array.isArray(group?.items) ? group.items : null;
+    if (items === null) {
       const currentIndex = itemIndex++;
+      if (flat && flatAmountMinor !== null) {
+        const position = POSITIONS[flat[1] ?? ""];
+        const side = flat[2] ?? "";
+        if (position !== undefined && SIDES.has(side)) {
+          normalized.push({
+            itemIndex: currentIndex,
+            play: `P${position}:${side}`,
+            amountMinor: flatAmountMinor,
+          });
+        }
+      }
+      continue;
+    }
+    const position = POSITIONS[String(group?.title ?? "")];
+    for (const rawItem of items) {
+      const nestedIndex = itemIndex++;
       const item = record(rawItem);
       const side = String(item?.title ?? "");
       const amountMinor = toMinor(item?.money);
@@ -64,13 +82,43 @@ function normalizedItems(payload: UnknownRecord): Array<{
         continue;
       }
       normalized.push({
-        itemIndex: currentIndex,
+        itemIndex: nestedIndex,
         play: `P${position}:${side}`,
         amountMinor,
       });
     }
   }
   return normalized;
+}
+
+function resultFromPayload(payload: UnknownRecord): {
+  issue: string;
+  digits: number[];
+} | null {
+  const directIssue = String(payload.serial ?? "");
+  if (Array.isArray(payload.result)) {
+    if (
+      !/^\d{8,16}$/.test(directIssue) ||
+      payload.result.length !== 5 ||
+      payload.result.some(
+        (digit) =>
+          typeof digit !== "number" ||
+          !Number.isInteger(digit) ||
+          digit < 0 ||
+          digit > 9,
+      )
+    ) {
+      return null;
+    }
+    return { issue: directIssue, digits: [...payload.result] };
+  }
+  const liveResult = record(payload.result);
+  const issue = String(liveResult?.serial ?? "");
+  const value = String(liveResult?.value ?? "").replace(/\s+/g, "");
+  const match = value.match(/^([0-9])\+([0-9])\+([0-9])\+([0-9])\+([0-9])=/);
+  return /^\d{8,16}$/.test(issue) && match
+    ? { issue, digits: match.slice(1, 6).map(Number) }
+    : null;
 }
 
 export async function createFfcNormalizer(
@@ -106,24 +154,34 @@ export async function createFfcNormalizer(
     const text = record(root?.text);
     const outer = record(text?.ext);
     const payload = record(outer?.ext);
-    if (
-      outer?.isRobot !== "1" ||
-      payload?.model !== "Btcffc" ||
-      !["1", "2", "4"].includes(String(payload.type ?? ""))
-    ) {
+    if (outer?.isRobot !== "1" || !payload) {
       return [];
     }
 
-    const issue = String(payload.serial ?? "");
+    const type = String(payload.type ?? "");
+    if (!["1", "2", "4"].includes(type)) return [];
+    const items = normalizedItems(payload);
+    const result = type === "4" ? resultFromPayload(payload) : null;
+    const model = String(payload.model ?? "");
+    if (
+      (type === "1" && model !== "Btcffc" && items.length === 0) ||
+      (type === "2" && model !== "Btcffc") ||
+      (type === "4" && model !== "Btcffc" && result === null)
+    ) {
+      return [];
+    }
+    const issue = result?.issue ?? String(payload.serial ?? "");
     const sourceMs = sourceMilliseconds(root?.time);
     const receivedAtMs = sourceMilliseconds(now());
     if (!/^\d{8,16}$/.test(issue) || sourceMs === null || receivedAtMs === null) {
       return [];
     }
 
-    const type = String(payload.type);
-    const actor = typeof outer.uid === "string" && outer.uid ? outer.uid : null;
-    const items = normalizedItems(payload);
+    const actorCandidate = outer.uid ?? payload.at;
+    const actor = typeof actorCandidate === "string" &&
+        actorCandidate.length > 0 && actorCandidate.length <= 512
+      ? actorCandidate
+      : null;
     const stableMessageId =
       typeof root?.idClient === "string" && root.idClient
         ? root.idClient
@@ -183,24 +241,12 @@ export async function createFfcNormalizer(
       );
     }
 
-    if (
-      !Array.isArray(payload.result) ||
-      payload.result.length !== 5 ||
-      payload.result.some(
-        (digit) =>
-          typeof digit !== "number" ||
-          !Number.isInteger(digit) ||
-          digit < 0 ||
-          digit > 9,
-      )
-    ) {
-      return [];
-    }
+    if (result === null) return [];
     return [
       capturedEventSchema.parse({
         kind: "RESULT",
         eventKey: await eventKey(0),
-        digits: payload.result,
+        digits: result.digits,
         ...common,
       }),
     ];

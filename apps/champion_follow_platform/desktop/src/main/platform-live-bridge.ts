@@ -7,6 +7,7 @@ import type {
   RawSubmission,
 } from "./platform-adapter";
 import type { ChromeBrowserController } from "./chrome-controller";
+import { platformLiveStateScript } from "./platform-live-state";
 import { getPlatformPageController } from "./platform-window";
 
 type PageState = {
@@ -34,7 +35,7 @@ export class NgPlatformBridge implements PlatformBridge {
 
   async readState(): Promise<unknown> {
     const pageController = requiredPage();
-    const page = await evaluate<PageState>(pageController, readPageStateScript());
+    const page = await evaluateMain<PageState>(pageController, readPageStateScript());
     const odds: Record<string, 1_960_000> = {};
     for (let position = 1; position <= 5; position += 1) {
       for (const direction of Object.keys(directionLabels)) {
@@ -67,7 +68,7 @@ export class NgPlatformBridge implements PlatformBridge {
       return { status: "REJECTED", reasonCode: "BET_CONTROLS_MISMATCH" };
     }
 
-    const current = await evaluate<PageState>(pageController, readPageStateScript());
+    const current = await evaluateMain<PageState>(pageController, readPageStateScript());
     if (current.periodId !== order.periodId || current.phase !== "OPEN" ||
         current.countdownMs <= 0) {
       return { status: "REJECTED", reasonCode: "PERIOD_CLOSED" };
@@ -148,6 +149,13 @@ async function evaluate<T>(
   return await pageController.evaluate<T>(code);
 }
 
+async function evaluateMain<T>(
+  pageController: ChromeBrowserController,
+  code: string,
+): Promise<T> {
+  return await pageController.evaluateMainWorld<T>(code);
+}
+
 async function waitFor<T>(
   pageController: ChromeBrowserController,
   code: string,
@@ -167,33 +175,10 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function readPageStateScript(): string {
+export function readPageStateScript(): string {
   return `(() => {
-    const visible = (element) => !!element &&
-      (element.offsetWidth || element.offsetHeight || element.getClientRects().length);
     const compact = (value) => String(value || "").replace(/\\s+/g, "").trim();
-    const text = document.body ? document.body.innerText : "";
-    const selected = [...document.querySelectorAll(".betData .blueTxt")]
-      .map((element) => compact(element.textContent))
-      .filter((value) => /^\\d{8,20}$/.test(value));
-    const fallback = text.match(/第(\\d{8,20})期开奖/);
-    const periods = [...new Set(selected.length ? selected : fallback ? [fallback[1]] : [])];
-    const countdowns = [...document.querySelectorAll(".van-count-down")]
-      .filter(visible).map((element) => compact(element.textContent))
-      .filter((value) => /^(?:\\d{1,2}:)?\\d{1,2}:\\d{2}$/.test(value));
-    const countdownText = countdowns.length === 1 ? countdowns[0] :
-      (text.match(/(?:^|\\n)((?:\\d{1,2}:)?\\d{1,2}:\\d{2})(?:\\n|$)/m) || [])[1];
-    let countdownMs = 0;
-    if (countdownText) {
-      const parts = countdownText.split(":").map(Number);
-      countdownMs = (parts.length === 3
-        ? parts[0] * 3600 + parts[1] * 60 + parts[2]
-        : parts[0] * 60 + parts[1]) * 1000;
-    }
-    const betButton = [...document.querySelectorAll("button")]
-      .find((element) => compact(element.innerText) === "投注");
-    const phase = betButton && !betButton.disabled && countdownMs > 0
-      ? "OPEN" : /封盘开奖中|封盤|已封盘/.test(text) ? "CLOSED" : "RESULT";
+    const live = ${platformLiveStateScript()};
     let balance = null;
     for (const label of [...document.querySelectorAll("*")]) {
       if (label.children.length || compact(label.textContent) !== "账户余额") continue;
@@ -205,9 +190,10 @@ function readPageStateScript(): string {
       }
     }
     return {
-      periodId: periods.length === 1 ? periods[0] : "",
-      countdownMs,
-      phase,
+      periodId: live.currentPeriodId || "",
+      countdownMs: live.countdownMs === null ? 0 : live.countdownMs,
+      phase: live.phase === "OPEN" ? "OPEN" :
+        live.phase === "CLOSED" ? "CLOSED" : "RESULT",
       currentBalanceFen: balance,
     };
   })()`;

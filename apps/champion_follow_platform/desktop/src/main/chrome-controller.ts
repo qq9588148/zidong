@@ -177,6 +177,24 @@ export class ChromeBrowserController {
     return evaluated.result.value as T;
   }
 
+  async evaluateMainWorld<T>(code: string): Promise<T> {
+    if (!this.page?.isOpen()) throw new Error("chrome_page_unavailable");
+    const evaluated = await this.page.send("Runtime.evaluate", {
+      expression: code,
+      returnByValue: true,
+      awaitPromise: true,
+      userGesture: false,
+    }) as {
+      result?: { value?: T; type?: string };
+      exceptionDetails?: unknown;
+    };
+    if (evaluated.exceptionDetails || !evaluated.result ||
+        !("value" in evaluated.result)) {
+      throw new Error("chrome_evaluation_failed");
+    }
+    return evaluated.result.value as T;
+  }
+
   async close(): Promise<void> {
     try {
       if (this.browser?.isOpen()) await this.browser.send("Browser.close");

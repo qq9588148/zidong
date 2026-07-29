@@ -60,6 +60,8 @@ type ChampionPlatformPageProbe = {
   balanceLabelVisible: boolean;
   balanceValueReadable: boolean;
   publicBetCommandCount: number;
+  publicBetSourceAvailable: boolean;
+  publicBetSourceComplete: boolean;
   stakeInputCount: number;
   betControlCount: number;
   contractReady: boolean;

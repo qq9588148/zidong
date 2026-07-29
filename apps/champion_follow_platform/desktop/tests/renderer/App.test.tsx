@@ -265,6 +265,8 @@ describe("App registration state", () => {
           balanceLabelVisible: true,
           balanceValueReadable: true,
           publicBetCommandCount: 2,
+          publicBetSourceAvailable: true,
+          publicBetSourceComplete: true,
           stakeInputCount: 0,
           betControlCount: 0,
           contractReady: false,

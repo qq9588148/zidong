@@ -173,7 +173,7 @@ function startPlatformPageProbe(controller: ChromeBrowserController): void {
     platformProbeInFlight = true;
     try {
       latestPlatformProbe = parsePlatformPageProbe(
-        await controller.evaluate<unknown>(platformPageProbeScript()),
+        await controller.evaluateMainWorld<unknown>(platformPageProbeScript()),
       );
     } catch {
       latestPlatformProbe = null;

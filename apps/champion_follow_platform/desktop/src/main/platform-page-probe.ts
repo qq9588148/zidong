@@ -1,3 +1,8 @@
+import {
+  platformLiveStateScript,
+  readPlatformLiveState,
+} from "./platform-live-state";
+
 export type PlatformPageProbe = Readonly<{
   gameVisible: boolean;
   currentPeriodId: string | null;
@@ -15,6 +20,8 @@ export type PlatformPageProbe = Readonly<{
   balanceLabelVisible: boolean;
   balanceValueReadable: boolean;
   publicBetCommandCount: number;
+  publicBetSourceAvailable: boolean;
+  publicBetSourceComplete: boolean;
   stakeInputCount: number;
   betControlCount: number;
   contractReady: boolean;
@@ -32,6 +39,8 @@ const fields = [
   "gameVisible",
   "periodCandidateCount",
   "publicBetCommandCount",
+  "publicBetSourceAvailable",
+  "publicBetSourceComplete",
   "stakeInputCount",
 ].sort();
 
@@ -39,7 +48,11 @@ const directionFields = [
   "BIG", "COMPOSITE", "EVEN", "ODD", "PRIME", "SMALL",
 ].sort();
 
-export function probePlatformDocument(document: Document): PlatformPageProbe {
+export function probePlatformDocument(
+  document: Document,
+  providedLiveState?: ReturnType<typeof readPlatformLiveState>,
+): PlatformPageProbe {
+  const liveState = providedLiveState ?? readPlatformLiveState(document);
   const texts: string[] = [];
   const walker = document.createTreeWalker(
     document.body ?? document.documentElement,
@@ -80,7 +93,10 @@ export function probePlatformDocument(document: Document): PlatformPageProbe {
   const periodCandidates = texts.filter(
     (text) => /^\d{8,20}$/.test(text),
   );
-  const periodCandidateCount = periodCandidates.length;
+  const periodCandidateCount = Math.max(
+    periodCandidates.length,
+    liveState.currentPeriodId === null ? 0 : 1,
+  );
   const selectedPeriods = Array.from(document.querySelectorAll(
     ".betData .blueTxt",
   )).map((element) => (element.textContent ?? "").trim())
@@ -89,13 +105,15 @@ export function probePlatformDocument(document: Document): PlatformPageProbe {
     selectedPeriods.length > 0 ? selectedPeriods :
       periodCandidates.length === 1 ? periodCandidates : [],
   )];
-  const currentPeriodId = uniquePeriods.length === 1
-    ? uniquePeriods[0] ?? null
-    : null;
+  const currentPeriodId = liveState.currentPeriodId ??
+    (uniquePeriods.length === 1 ? uniquePeriods[0] ?? null : null);
   const countdownCandidates = texts.filter(
     (text) => /^(?:\d{1,2}:)?\d{1,2}:\d{2}$/.test(text),
   );
-  const countdownCandidateCount = countdownCandidates.length;
+  const countdownCandidateCount = Math.max(
+    countdownCandidates.length,
+    liveState.countdownMs === null ? 0 : 1,
+  );
   const selectedCountdowns = Array.from(document.querySelectorAll(
     ".van-count-down",
   )).map((element) => (element.textContent ?? "").replace(/\s+/g, "").trim())
@@ -112,9 +130,8 @@ export function probePlatformDocument(document: Document): PlatformPageProbe {
       })
       .filter((value) => Number.isSafeInteger(value) && value >= 0),
   )];
-  const countdownMs = countdownValues.length === 1
-    ? countdownValues[0] ?? null
-    : null;
+  const countdownMs = liveState.countdownMs ??
+    (countdownValues.length === 1 ? countdownValues[0] ?? null : null);
   const balanceLabelVisible = texts.some(
     (text) => text === "余额" || text.includes("账户余额"),
   );
@@ -167,7 +184,9 @@ export function probePlatformDocument(document: Document): PlatformPageProbe {
     directionTextCounts: Object.freeze(directionTextCounts),
     balanceLabelVisible,
     balanceValueReadable,
-    publicBetCommandCount: publicBetCommands.length,
+    publicBetCommandCount: liveState.publicBetCommandCount,
+    publicBetSourceAvailable: liveState.publicBetSourceAvailable,
+    publicBetSourceComplete: liveState.publicBetSourceComplete,
     stakeInputCount,
     betControlCount,
     contractReady,
@@ -175,7 +194,7 @@ export function probePlatformDocument(document: Document): PlatformPageProbe {
 }
 
 export function platformPageProbeScript(): string {
-  return `(${probePlatformDocument.toString()})(document)`;
+  return `(${probePlatformDocument.toString()})(document, ${platformLiveStateScript()})`;
 }
 
 export function parsePlatformPageProbe(value: unknown): PlatformPageProbe | null {
@@ -184,6 +203,8 @@ export function parsePlatformPageProbe(value: unknown): PlatformPageProbe | null
       typeof value.balanceLabelVisible !== "boolean" ||
       typeof value.balanceValueReadable !== "boolean" ||
       typeof value.contractReady !== "boolean" ||
+      typeof value.publicBetSourceAvailable !== "boolean" ||
+      typeof value.publicBetSourceComplete !== "boolean" ||
       !isNullablePeriod(value.currentPeriodId) ||
       !isNullableCountdown(value.countdownMs) ||
       !isCount(value.periodCandidateCount) ||
@@ -213,6 +234,8 @@ export function parsePlatformPageProbe(value: unknown): PlatformPageProbe | null
     balanceLabelVisible: value.balanceLabelVisible,
     balanceValueReadable: value.balanceValueReadable,
     publicBetCommandCount: value.publicBetCommandCount as number,
+    publicBetSourceAvailable: value.publicBetSourceAvailable,
+    publicBetSourceComplete: value.publicBetSourceComplete,
     stakeInputCount: value.stakeInputCount as number,
     betControlCount: value.betControlCount as number,
     contractReady: value.contractReady,
@@ -234,6 +257,8 @@ export function mergePlatformPageProbes(
     result.balanceLabelVisible ||= probe.balanceLabelVisible;
     result.balanceValueReadable ||= probe.balanceValueReadable;
     result.publicBetCommandCount += probe.publicBetCommandCount;
+    result.publicBetSourceAvailable ||= probe.publicBetSourceAvailable;
+    result.publicBetSourceComplete ||= probe.publicBetSourceComplete;
     result.stakeInputCount += probe.stakeInputCount;
     result.betControlCount += probe.betControlCount;
     for (const key of directionFields) {
@@ -271,6 +296,8 @@ function emptyProbe(): {
     balanceLabelVisible: false,
     balanceValueReadable: false,
     publicBetCommandCount: 0,
+    publicBetSourceAvailable: false,
+    publicBetSourceComplete: false,
     stakeInputCount: 0,
     betControlCount: 0,
     contractReady: false,

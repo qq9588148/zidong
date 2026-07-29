@@ -413,7 +413,12 @@ export function App() {
           <p>
             赔率：固定 1.96
             {" · "}余额：{platformProbe?.balanceValueReadable ? "已识别" : "未识别"}
-            {" · "}公开下注：{platformProbe?.publicBetCommandCount ?? 0} 条
+            {" · "}本期公开下注：{platformProbe?.publicBetCommandCount ?? 0} 条
+            {platformProbe?.publicBetSourceAvailable
+              ? platformProbe.publicBetSourceComplete
+                ? "（页面源数据）"
+                : "（正在回填页面源数据）"
+              : "（页面累计）"}
           </p>
           <p>
             登录态保存：{platformSession.snapshotPresent

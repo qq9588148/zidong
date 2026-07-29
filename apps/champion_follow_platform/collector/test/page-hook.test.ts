@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  decodeHistoryMessages,
   installRoomHook,
   LiveCaptureMode,
   readBtcffcPageState,
@@ -181,5 +182,41 @@ describe("public room hook", () => {
     expect(message.text).toEqual({
       ext: { isRobot: "1", ext: { model: "Btcffc" } },
     });
+  });
+
+  it("decodes an SDK history page through the original page callback once", async () => {
+    const emitted: unknown[] = [];
+    const message: { text: unknown } = { text: "encrypted-history" };
+    const room = {
+      protocol: {
+        options: {
+          onmsgs(messages: unknown[]) {
+            (messages[0] as { text: unknown }).text = {
+              ext: {
+                isRobot: "1",
+                ext: {
+                  type: "1",
+                  serial: "2607291317",
+                  at: "raw-player-candidate",
+                  items: [{ title: "猜双面-第一球_大", money: "1" }],
+                },
+              },
+            };
+          },
+        },
+      },
+    };
+    installRoomHook(room, (payload) => emitted.push(payload));
+
+    expect(decodeHistoryMessages(room, [message])).toBe(true);
+    await Promise.resolve();
+
+    expect(message.text).toEqual({
+      ext: {
+        isRobot: "1",
+        ext: expect.objectContaining({ serial: "2607291317" }),
+      },
+    });
+    expect(emitted).toEqual([]);
   });
 });

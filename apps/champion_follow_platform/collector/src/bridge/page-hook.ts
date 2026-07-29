@@ -149,6 +149,23 @@ export function installRoomHook(room: Room | undefined, emit: EmitMessages): boo
   return true;
 }
 
+export function decodeHistoryMessages(
+  room: Room | undefined,
+  messages: unknown[],
+): boolean {
+  if (messages.length === 0) return true;
+  const needsDecode = messages.some((message) =>
+    typeof object(message)?.text === "string");
+  if (!needsDecode) return true;
+  if (room !== mounted || typeof mountedOriginal !== "function") return false;
+  try {
+    mountedOriginal.call(room, messages);
+    return messages.every((message) => typeof object(message)?.text !== "string");
+  } catch {
+    return false;
+  }
+}
+
 function emit(kind: string, payload: unknown): void {
   window.postMessage({ marker: MARKER, kind, payload }, location.origin);
 }
@@ -267,10 +284,15 @@ if (typeof window !== "undefined") {
           emit("history-error", { requestId });
           return;
         }
+        const messages = Array.isArray(result) ? result : (result.msgs ?? []);
+        if (!decodeHistoryMessages(room, messages)) {
+          emit("history-error", { requestId });
+          return;
+        }
         emit("messages", {
           origin: "history",
           requestId,
-          messages: Array.isArray(result) ? result : (result.msgs ?? []),
+          messages,
         });
       },
     });

@@ -136,6 +136,38 @@ describe("platform page probe", () => {
     expect(JSON.stringify(result)).not.toMatch(/9\.50|100|anonymous/);
   });
 
+  it("keeps a deduplicated current-issue DOM fallback count and resets next issue", () => {
+    document.body.innerHTML = `
+      <main>
+        <h1>比特分分彩</h1>
+        <div class="betData"><span class="blueTxt">2607290101</span></div>
+        <div class="van-count-down">00:20</div>
+        <div class="online-message" data-message-id="message-1">
+          <div class="online-message-details"><p>第1球:大:1</p></div>
+        </div>
+      </main>`;
+
+    expect(probePlatformDocument(document).publicBetCommandCount).toBe(1);
+    document.querySelector(".online-message")?.remove();
+    document.querySelector("main")?.insertAdjacentHTML("beforeend", `
+      <div class="online-message" data-message-id="message-2">
+        <div class="online-message-details"><p>第2球:双:1</p></div>
+      </div>`);
+    expect(probePlatformDocument(document).publicBetCommandCount).toBe(2);
+    expect(probePlatformDocument(document).publicBetCommandCount).toBe(2);
+
+    document.body.innerHTML = `
+      <main>
+        <h1>比特分分彩</h1>
+        <div class="betData"><span class="blueTxt">2607290102</span></div>
+        <div class="van-count-down">00:19</div>
+        <div class="online-message" data-message-id="message-3">
+          <div class="online-message-details"><p>第3球:质:1</p></div>
+        </div>
+      </main>`;
+    expect(probePlatformDocument(document).publicBetCommandCount).toBe(1);
+  });
+
   it("merges frame counts and rejects additional or malformed fields", () => {
     const empty = probePlatformDocument(document.implementation.createHTMLDocument());
     const merged = mergePlatformPageProbes([empty, {
